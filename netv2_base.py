@@ -128,11 +128,6 @@ class BaseSoC(SoCSDRAM):
         checker_port = self.sdram.crossbar.get_port(mode="read")
         self.submodules.checker = LiteDRAMBISTChecker(checker_port)
 
-        # led blink
-        counter = Signal(32)
-        self.sync.clk125 += counter.eq(counter + 1)
-        self.comb += platform.request("user_led", 0).eq(counter[26])
-
 
 def main():
     parser = argparse.ArgumentParser(description="NeTV2 LiteX Base SoC")

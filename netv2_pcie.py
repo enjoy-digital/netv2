@@ -55,6 +55,11 @@ class PCIeDMASoC(BaseSoC):
         for k, v in sorted(self.interrupts.items()):
             self.comb += self.msi.irqs[self.interrupt_map[k]].eq(v)
 
+        # flash the led on pcie clock
+        counter = Signal(32)
+        self.sync.clk125 += counter.eq(counter + 1)
+        self.comb += platform.request("user_led", 0).eq(counter[26])
+
 
 def main():
     parser = argparse.ArgumentParser(description="NeTV2 LiteX PCIe SoC")
