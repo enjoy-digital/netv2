@@ -92,13 +92,13 @@ class DMA(Module):
 
 
 class DMAWriter(DMA):
-    def __init__(self, dram_port, fifo_depth=512):
-        self.sink = stream.Endpoint([("data", 32)])
+    def __init__(self, dram_port, dw=32, fifo_depth=512):
+        self.sink = stream.Endpoint([("data", dw)])
 
         # # #
 
         DMA.__init__(self, "write", dram_port, fifo_depth)
-        converter = stream.Converter(32, dram_port.dw, reverse=False)
+        converter = stream.Converter(dw, dram_port.dw, reverse=False)
         self.submodules += converter
         self.comb += [
             self.sink.connect(converter.sink),
@@ -107,13 +107,13 @@ class DMAWriter(DMA):
 
 
 class DMAReader(DMA):
-    def __init__(self, dram_port, fifo_depth=512):
-        self.source = stream.Endpoint([("data", 32)])
+    def __init__(self, dram_port, dw=32, fifo_depth=512):
+        self.source = stream.Endpoint([("data", dw)])
 
         # # #
 
         DMA.__init__(self, "read", dram_port, fifo_depth)
-        converter = stream.Converter(dram_port.dw, 32, reverse=False)
+        converter = stream.Converter(dram_port.dw, dw, reverse=False)
         self.submodules += converter
         self.comb += [
             self.endpoint.connect(converter.sink),

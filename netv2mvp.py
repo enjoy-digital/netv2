@@ -27,6 +27,8 @@ from litepcie.frontend.wishbone import LitePCIeWishboneBridge
 from litevideo.input import HDMIIn
 from litevideo.output import VideoOut
 from litevideo.output.hdmi.s7 import S7HDMIOutEncoderSerializer, S7HDMIOutPHY
+from litevideo.csc.ycbcr2rgb import YCbCr2RGB
+from litevideo.csc.ycbcr422to444 import YCbCr422to444
 
 from gateware.dma import DMAWriter, DMAReader, DMAControl
 
@@ -470,7 +472,7 @@ class VideoOverlaySoC(BaseSoC):
             self.hdmi_out0_phy.sink.c2.eq(self.hdmi_in0.syncpol.c2),
         ]
 
-        # hdmi in 1 (ycbcr422)
+        # hdmi in 1 (overlay ycbcr422)
         hdmi_in1_pads = platform.request("hdmi_in", 1)
         self.submodules.hdmi_in1_freq = FrequencyMeter(period=self.clk_freq)
         self.submodules.hdmi_in1 = HDMIIn(hdmi_in1_pads,
@@ -488,6 +490,33 @@ class VideoOverlaySoC(BaseSoC):
             self.hdmi_in1.clocking.cd_pix.clk,
             self.hdmi_in1.clocking.cd_pix1p25x.clk,
             self.hdmi_in1.clocking.cd_pix5x.clk)
+
+
+        #  hdmi out 1 (overlay ycbcr422)
+        dma_reader = DMAReader(self.sdram.crossbar.get_port(mode="read", cd="pix_o"), dw=16)
+        dma_reader = ClockDomainsRenamer("pix_o")(dma_reader)
+        self.submodules += dma_reader
+        self.submodules.dma_reader = ClockDomainsRenamer({"pix" : "pix_o"})(DMAControl(dma_reader))
+        ycbcr422to444 = ClockDomainsRenamer("pix_o")(YCbCr422to444())
+        ycbcr2rgb = ClockDomainsRenamer("pix_o")(YCbCr2RGB())
+        self.submodules += ycbcr422to444, ycbcr2rgb
+        self.comb += [
+            ycbcr422to444.sink.valid.eq(dma_reader.source.valid),
+            dma_reader.source.ready.eq(ycbcr422to444.sink.ready),
+            ycbcr422to444.sink.y.eq(dma_reader.source.data[0:8]),
+            ycbcr422to444.sink.cb_cr.eq(dma_reader.source.data[8:16]),
+
+            ycbcr422to444.source.connect(ycbcr2rgb.sink)
+        ]
+
+        # TODO: hdmi out 1 to hdmi out 0 injection 
+        self.comb += [
+            #ycbcr2rgb.source.valid
+            ycbcr2rgb.source.ready.eq(1),
+            #ycbcr2rgb.source.r
+            #ycbcr2rgb.source.g
+            #ycbcr2rgb.source.b
+        ]
 
         # litescope
         litescope_serial = platform.request("serial", 1)
