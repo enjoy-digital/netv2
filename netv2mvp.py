@@ -489,6 +489,32 @@ class VideoOverlaySoC(BaseSoC):
             self.hdmi_in1.clocking.cd_pix1p25x.clk,
             self.hdmi_in1.clocking.cd_pix5x.clk)
 
+        # litescope
+        litescope_serial = platform.request("serial", 1)
+        litescope_bus = Signal(128)
+        litescope_i = Signal(16)
+        litescope_o = Signal(16)
+        self.specials += [
+            Instance("litescope",
+                i_clock=ClockSignal(),
+                i_reset=ResetSignal(),
+                i_serial_rx=litescope_serial.rx,
+                o_serial_tx=litescope_serial.tx,
+                i_bus=litescope_bus,
+                i_i=litescope_i,
+                o_o=litescope_o
+            )
+        ]
+        platform.add_source(os.path.join("litescope", "litescope.v"))
+
+        # litescope test
+        self.comb += [
+            litescope_bus.eq(0x12345678ABCFEF),
+            platform.request("user_led", 1).eq(litescope_o[0]),
+            platform.request("user_led", 2).eq(litescope_o[1]),
+            litescope_i.eq(0x5AA5)
+        ]
+
 
 class VideoRawDMALoopbackSoC(BaseSoC):
     csr_peripherals = {
