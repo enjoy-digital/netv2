@@ -452,18 +452,10 @@ class VideoOverlaySoC(BaseSoC):
             self.hdmi_in0.clocking.cd_pix5x.clk)
 
         # hdmi out 0 (raw tmds)
-        def _to_hdmi_in0_pix(m):
-            return  ClockDomainsRenamer(
-                {"pix_o": "hdmi_in0_pix_o",
-                 "pix5x_o": "hdmi_in0_pix5x_o"}
-                )(m)
-
         hdmi_out0_pads = platform.request("hdmi_out", 0)
-        hdmi_out0_clk_gen = S7HDMIOutEncoderSerializer(hdmi_out0_pads.clk_p, hdmi_out0_pads.clk_n, bypass_encoder=True)
-        self.hdmi_out0_clk_gen = _to_hdmi_in0_pix(hdmi_out0_clk_gen)
+        self.submodules.hdmi_out0_clk_gen = S7HDMIOutEncoderSerializer(hdmi_out0_pads.clk_p, hdmi_out0_pads.clk_n, bypass_encoder=True)
         self.comb += self.hdmi_out0_clk_gen.data.eq(Signal(10, reset=0b0000011111))
-        hdmi_out0_phy = S7HDMIOutPHY(hdmi_out0_pads, mode="raw")
-        self.submodules.hdmi_out0_phy = _to_hdmi_in0_pix(hdmi_out0_phy)
+        self.submodules.hdmi_out0_phy = S7HDMIOutPHY(hdmi_out0_pads, mode="raw")
 
         # hdmi over
         self.comb += [
@@ -472,34 +464,30 @@ class VideoOverlaySoC(BaseSoC):
         ]
 
         # hdmi in 0 to hdmi out 0
-        self.sync.hdmi_in0_pix_o += [ # extra delay to absorb cross-domain jitter & routing
+        self.sync.pix_o += [ # extra delay to absorb cross-domain jitter & routing
             self.hdmi_out0_phy.sink.c0.eq(self.hdmi_in0.syncpol.c0),
             self.hdmi_out0_phy.sink.c1.eq(self.hdmi_in0.syncpol.c1),
             self.hdmi_out0_phy.sink.c2.eq(self.hdmi_in0.syncpol.c2),
         ]
 
-        # hdmi in 1
+        # hdmi in 1 (ycbcr422)
         hdmi_in1_pads = platform.request("hdmi_in", 1)
         self.submodules.hdmi_in1_freq = FrequencyMeter(period=self.clk_freq)
         self.submodules.hdmi_in1 = HDMIIn(hdmi_in1_pads,
-                                         self.sdram.crossbar.get_port(mode="write"),
-                                         fifo_depth=512,
-                                         device="xc7",
-                                         split_mmcm=True)
+                                          self.sdram.crossbar.get_port(mode="write"),
+                                          fifo_depth=512,
+                                          device="xc7",
+                                          split_mmcm=False)
         self.comb += self.hdmi_in1_freq.clk.eq(self.hdmi_in1.clocking.cd_pix.clk)
         platform.add_period_constraint(self.hdmi_in1.clocking.cd_pix.clk, period_ns(1*pix_freq))
-        platform.add_period_constraint(self.hdmi_in1.clocking.cd_pix_o.clk, period_ns(1*pix_freq))
         platform.add_period_constraint(self.hdmi_in1.clocking.cd_pix1p25x.clk, period_ns(1.25*pix_freq))
         platform.add_period_constraint(self.hdmi_in1.clocking.cd_pix5x.clk, period_ns(5*pix_freq))
 
         platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
             self.hdmi_in1.clocking.cd_pix.clk,
-            self.hdmi_in1.clocking.cd_pix_o.clk,
             self.hdmi_in1.clocking.cd_pix1p25x.clk,
             self.hdmi_in1.clocking.cd_pix5x.clk)
-
-        platform.add_platform_command("set_property CLOCK_DEDICATED_ROUTE FALSE [get_nets videooverlaysoc_hdmi_in1_mmcm_clk0]")
 
 
 class VideoRawDMALoopbackSoC(BaseSoC):
