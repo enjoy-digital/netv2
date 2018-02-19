@@ -47,7 +47,7 @@ _io = [
         IOStandard("LVCMOS33"),
     ),
 
-    ("serial_litescope", 0,
+    ("serial", 1,
         Subsignal("tx", Pins("C18")), # hax 10
         Subsignal("rx", Pins("B20")), # hax 12
         IOStandard("LVCMOS33")
