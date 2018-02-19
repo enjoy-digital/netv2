@@ -1,9 +1,12 @@
-import time
+#!/usr/bin/env python3
+
 from litex.soc.tools.remote import RemoteClient
-from litescope.software.driver.io import LiteScopeIODriver
+
+from litescope import LiteScopeIODriver
 
 
 def led_anim(inout):
+    import time
     for i in range(10):
         io.write(0xa5)
         time.sleep(0.1)
