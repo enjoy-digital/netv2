@@ -2,8 +2,8 @@
 import sys
 import os
 
-from litex.gen import *
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen import *
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.build.generic_platform import *
 from litex.build.xilinx import XilinxPlatform
@@ -411,7 +411,7 @@ class VideoOverlaySoC(BaseSoC):
         "hdmi_in0_edid_mem",
         "hdmi_in1",
         "hdmi_in1_freq",
-        "hdmi_in1_edid_mem",  
+        "hdmi_in1_edid_mem",
         "generator",
         "checker",
     }
@@ -509,7 +509,7 @@ class VideoOverlaySoC(BaseSoC):
             ycbcr422to444.source.connect(ycbcr2rgb.sink)
         ]
 
-        # TODO: hdmi out 1 to hdmi out 0 injection 
+        # TODO: hdmi out 1 to hdmi out 0 injection
         self.comb += [
             #ycbcr2rgb.source.valid
             ycbcr2rgb.source.ready.eq(1),

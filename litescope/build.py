@@ -1,4 +1,4 @@
-from litex.gen import *
+from migen import *
 
 from litex.build.tools import write_to_file
 from litex.build.generic_platform import *
