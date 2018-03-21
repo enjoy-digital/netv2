@@ -222,11 +222,11 @@ class CRG(Module):
 
 
 class BaseSoC(SoCSDRAM):
-    csr_peripherals = {
+    csr_peripherals = [
         "ddrphy",
         "dna",
         "xadc",
-    }
+    ]
     csr_map_update(SoCSDRAM.csr_map, csr_peripherals)
 
     def __init__(self, platform, **kwargs):
@@ -269,12 +269,12 @@ class BaseSoC(SoCSDRAM):
 
 
 class PCIeSoC(BaseSoC):
-    csr_map = {
+    csr_map = [
         "pcie_phy": 20,
         "dma":      21,
         "msi":      22,
-    }
-    csr_map.update(BaseSoC.csr_map)
+    ]
+    csr_map_update(BaseSoC.csr_map, csr_peripherals)
 
     BaseSoC.mem_map["csr"] = 0x00000000
     BaseSoC.mem_map["rom"] = 0x20000000
@@ -322,12 +322,12 @@ class PCIeSoC(BaseSoC):
         tools.write_to_file(os.path.join("software", "pcie", "kernel", "csr.h"), csr_header)
 
 class VideoSoC(BaseSoC):
-    csr_peripherals = {
+    csr_peripherals = [
         "hdmi_out0",
         "hdmi_in0",
         "hdmi_in0_freq",
         "hdmi_in0_edid_mem"
-    }
+    ]
     csr_map_update(BaseSoC.csr_map, csr_peripherals)
 
     interrupt_map = {
