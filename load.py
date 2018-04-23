@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from litex.build.xilinx import VivadoProgrammer
+from litex.build.openocd import OpenOCD
 
-prog = VivadoProgrammer()
+prog = OpenOCD("openocd.cfg")
 prog.load_bitstream("build/gateware/top.bit")
