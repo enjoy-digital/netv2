@@ -184,36 +184,20 @@ class Platform(XilinxPlatform):
     def __init__(self, toolchain="vivado", programmer="vivado"):
         XilinxPlatform.__init__(self, "xc7a35t-fgg484-2", _io,
                                 toolchain=toolchain)
-
-        self.add_platform_command(
-            "set_property CONFIG_VOLTAGE 3.3 [current_design]")
-        self.add_platform_command(
-            "set_property CFGBVS VCCO [current_design]")
-        self.add_platform_command(
-            "set_property BITSTREAM.CONFIG.CONFIGRATE 22 [current_design]")
-        self.add_platform_command(
-            "set_property BITSTREAM.CONFIG.SPI_BUSWIDTH 1 [current_design]")
         self.toolchain.bitstream_commands = [
-            "set_property CONFIG_VOLTAGE 1.5 [current_design]",
-            "set_property CFGBVS GND [current_design]",
-            "set_property BITSTREAM.CONFIG.CONFIGRATE 22 [current_design]",
-            "set_property BITSTREAM.CONFIG.SPI_BUSWIDTH 1 [current_design]",
+            "set_property CONFIG_VOLTAGE 3.3 [current_design]",
+            "set_property CFGBVS VCCO [current_design]",
+            "set_property BITSTREAM.CONFIG.CONFIGRATE 40 [current_design]",
+            "set_property BITSTREAM.CONFIG.SPI_BUSWIDTH 4 [current_design]",
         ]
         self.toolchain.additional_commands = \
-            ["write_cfgmem -verbose -force -format bin -interface spix1 -size 64 "
+            ["write_cfgmem -verbose -force -format bin -interface spix4 -size 16 "
              "-loadbit \"up 0x0 {build_name}.bit\" -file {build_name}.bin"]
         self.programmer = programmer
 
         self.add_platform_command("""
 create_clock -name pcie_phy_clk -period 10.0 [get_pins {{pcie_phy/pcie_support_i/pcie_i/inst/inst/gt_top_i/pipe_wrapper_i/pipe_lane[0].gt_wrapper_i/gtp_channel.gtpe2_channel_i/TXOUTCLK}}]
 """)
-
-    def create_programmer(self):
-        if self.programmer == "vivado":
-            return VivadoProgrammer(flash_part="n25q128-3.3v-spi-x1_x2_x4")
-        else:
-            raise ValueError("{} programmer is not supported"
-                             .format(self.programmer))
 
     def do_finalize(self, fragment):
         XilinxPlatform.do_finalize(self, fragment)
