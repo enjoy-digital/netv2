@@ -1,5 +1,4 @@
 - integrate Bunnie's changes.
-- test Ethernet.
 - test HDMI.
 - test SDCard.
 - test HDMI <--> PCIe.
