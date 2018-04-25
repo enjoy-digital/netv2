@@ -1,8 +1,6 @@
-- Add real hdmi support to litevideo input. (at least ignore specific hdmi data)
-- Inject captured hdmi data into litevideo input, simulate.
-- Test real hdmi support on board.
-- Add second HDMI in/out ports to NeTV2MVP.
-- Test Host Memory <--> DDR3 DMAs
-- Test Host Memory --> DDR3 --> VideoOut
-- Test VideoIn --> DDR3 --> Host Memory
-- Test PCIe Gen2 X4 (requires LitePCIe changes).
+- integrate Bunnie's changes.
+- test Ethernet.
+- test HDMI.
+- test SDCard.
+- test HDMI <--> PCIe.
+- test PCIe Gen2 X4 (requires LitePCIe changes).
