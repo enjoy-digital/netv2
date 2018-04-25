@@ -7,4 +7,4 @@ if "vivado" in sys.argv[1:]:
 else:
     from litex.build.openocd import OpenOCD
     prog = OpenOCD("openocd.cfg")
-    prog.load("build/gateware/top.bit")
+    prog.load_bitstream("build/gateware/top.bit")
