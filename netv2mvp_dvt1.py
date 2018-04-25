@@ -12,7 +12,7 @@ from litex.soc.integration.soc_core import mem_decoder
 from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
 from litex.soc.integration.cpu_interface import get_csr_header
-from litex.soc.cores import dna, xadc
+from litex.soc.cores import dna, xadc, timer
 
 from litedram.modules import MT41J128M16
 from litedram.phy import a7ddrphy
@@ -23,6 +23,11 @@ from liteeth.phy.rmii import LiteEthPHYRMII
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
+from litesdcard.phy import SDPHY
+from litesdcard.clocker import SDClockerS7
+from litesdcard.core import SDCore
+from litesdcard.bist import BISTBlockGenerator, BISTBlockChecker
+
 from litepcie.phy.s7pciephy import S7PCIEPHY
 from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
 from litepcie.frontend.dma import LitePCIeDMA
@@ -32,11 +37,11 @@ _io = [
     ("clk50", 0, Pins("J19"), IOStandard("LVCMOS33")),
 
     ("user_led", 0, Pins("M21"), IOStandard("LVCMOS33")),
-    ("user_led", 0, Pins("N20"), IOStandard("LVCMOS33")),
-    ("user_led", 0, Pins("L21"), IOStandard("LVCMOS33")),
-    ("user_led", 0, Pins("AA21"), IOStandard("LVCMOS33")),
-    ("user_led", 0, Pins("R19"), IOStandard("LVCMOS33")),
-    ("user_led", 0, Pins("M16"), IOStandard("LVCMOS33")),
+    ("user_led", 1, Pins("N20"), IOStandard("LVCMOS33")),
+    ("user_led", 2, Pins("L21"), IOStandard("LVCMOS33")),
+    ("user_led", 3, Pins("AA21"), IOStandard("LVCMOS33")),
+    ("user_led", 4, Pins("R19"), IOStandard("LVCMOS33")),
+    ("user_led", 5, Pins("M16"), IOStandard("LVCMOS33")),
 
     ("serial", 0,
         Subsignal("tx", Pins("E14")),
@@ -121,6 +126,13 @@ _io = [
         Subsignal("int_n", Pins("D21")),
         IOStandard("LVCMOS33")
      ),
+
+     ("sdcard", 0,
+        Subsignal("data", Pins("L15 L16 K14 M13"), Misc("PULLUP True")),
+        Subsignal("cmd", Pins("L13"), Misc("PULLUP True")),
+        Subsignal("clk", Pins("K19")),
+        IOStandard("LVCMOS33"), Misc("SLEW=FAST")
+    ),
 ]
 
 
@@ -255,7 +267,7 @@ class BaseSoC(SoCSDRAM):
                                                                    cmd_buffer_depth=8,
                                                                    with_refresh=False))
 
-        # led blinking (sys
+        # led blinking (sys)
         sys_counter = Signal(32)
         self.sync.sys += sys_counter.eq(sys_counter + 1)
         self.comb += platform.request("user_led", 0).eq(sys_counter[26])
@@ -290,6 +302,51 @@ class EtherboneSoC(BaseSoC):
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
             self.ethphy.crg.cd_eth_tx.clk)
+
+
+class SDCardSoC(EtherboneSoC):
+    csr_peripherals = [
+        "sdclk",
+        "sdphy",
+        "sdcore",
+        "sdtimer",
+        "sdemulator",
+        "bist_generator",
+        "bist_checker",
+        "analyzer",
+    ]
+    csr_map_update(EtherboneSoC.csr_map, csr_peripherals)
+
+    def __init__(self, platform):
+        clk_freq = int(100e6)
+        sd_freq = int(100e6)
+        EtherboneSoC.__init__(self, platform)
+
+        # sd
+        self.submodules.sdclk = SDClockerS7()
+        self.submodules.sdphy = SDPHY(platform.request("sdcard"), platform.device)
+        self.submodules.sdcore = SDCore(self.sdphy)
+        self.submodules.sdtimer = timer.Timer()
+
+        self.submodules.bist_generator = BISTBlockGenerator(random=True)
+        self.submodules.bist_checker = BISTBlockChecker(random=True)
+
+        self.comb += [
+            self.sdcore.source.connect(self.bist_checker.sink),
+            self.bist_generator.source.connect(self.sdcore.sink)
+        ]
+
+        self.platform.add_false_path_constraints(
+            self.crg.cd_sys.clk,
+            self.sdclk.cd_sd.clk)
+        self.platform.add_false_path_constraints(
+            self.crg.cd_sys.clk,
+            self.sdclk.cd_sd_fb.clk)
+
+        # led blinking (sys)
+        sd_counter = Signal(32)
+        self.sync.sd += sd_counter.eq(sd_counter + 1)
+        self.comb += platform.request("user_led", 1).eq(sd_counter[26])
 
 
 class PCIeSoC(BaseSoC):
@@ -350,12 +407,14 @@ class PCIeSoC(BaseSoC):
 def main():
     platform = Platform()
     if len(sys.argv) < 2:
-        print("missing target (base or pcie)")
+        print("missing target (base or etherbone or sdcard or pcie)")
         exit()
     if sys.argv[1] == "base":
         soc = BaseSoC(platform)
     elif sys.argv[1] == "etherbone":
         soc = EtherboneSoC(platform)
+    elif sys.argv[1] == "sdcard":
+        soc = SDCardSoC(platform)
     elif sys.argv[1] == "pcie":
         soc = PCIeSoC(platform)
     else:
