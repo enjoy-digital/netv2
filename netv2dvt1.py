@@ -235,7 +235,7 @@ class BaseSoC(SoCSDRAM):
         SoCSDRAM.__init__(self, platform, clk_freq,
             integrated_rom_size=0x6000,
             integrated_sram_size=0x4000,
-            ident="NeTV2DVT1 LiteX Base SoC",
+            ident="NeTV2DVT1 LiteX Test SoC", ident_version="True",
             reserve_nmi_interrupt=False,
             **kwargs)
 
