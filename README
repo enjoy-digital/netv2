@@ -3,7 +3,7 @@
     /    / -_) /  | |/ / __/___/\ \/ _ \/ /__
    /_/|_/\__/_/   |___/____/  /___/\___/\___/
 
-        Copyright 2016-2017 / EnjoyDigital
+        Copyright 2016-2018 / EnjoyDigital
 
            NeTV2 SoC based on LiteX
 
@@ -36,8 +36,8 @@
   cd ..
 
 6. Build the gateware and software:
-  make netv2_base/netv2_pcie/netv2_video
-  make load
+  python3 netv2xxyy.py (base, pcie, etherbone, ...)
+  python3 load.py
 
 [> Status
 ---------
@@ -57,6 +57,17 @@ HDMI_OUT_0: OK
 HDMI_IN_0:  OK (with DVI up to 1080p60)
 HDMI_OUT_1: OK
 HDMI_IN_1:  OK (with DVI up to 1080p60)
+
+NeTV2-DVT1:
+UART:       OK
+ETHERNET:   OK
+SDCARD:     UNTESTED
+PCIe:       UNTESTED
+DDR3:       UNTESTED
+HDMI_OUT_0: UNTESTED
+HDMI_IN_0:  UNTESTED
+HDMI_OUT_1: UNTESTED
+HDMI_IN_1:  UNTESTED
 
 [> Contact
 ----------
