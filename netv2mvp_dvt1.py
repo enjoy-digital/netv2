@@ -216,7 +216,7 @@ class CRG(Module):
             Instance("BUFG", i_I=pll_clk200, o_O=self.cd_clk200.clk),
             Instance("BUFG", i_I=pll_sys4x, o_O=self.cd_sys4x.clk),
             Instance("BUFG", i_I=pll_sys4x_dqs, o_O=self.cd_sys4x_dqs.clk),
-            Instance("BUFG", i_I=pll_clk50, o_O=self.cd_eth.clk),            
+            Instance("BUFG", i_I=pll_clk50, o_O=self.cd_eth.clk),
             AsyncResetSynchronizer(self.cd_sys, ~pll_locked),
             AsyncResetSynchronizer(self.cd_clk200, ~pll_locked),
             AsyncResetSynchronizer(self.cd_clk100, ~pll_locked),
@@ -363,7 +363,7 @@ class PCIeSoC(BaseSoC):
     BaseSoC.mem_map["rom"] = 0x20000000
 
     def __init__(self, platform, **kwargs):
-        BaseSoC.__init__(self, platform, csr_data_width=32, shadow_base=0x00000000, **kwargs)
+        BaseSoC.__init__(self, platform, cpu_type=None, csr_data_width=32, shadow_base=0x00000000,**kwargs)
 
         # pcie phy
         self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x2"))
@@ -375,8 +375,8 @@ class PCIeSoC(BaseSoC):
         self.submodules.pcie_endpoint = LitePCIeEndpoint(self.pcie_phy, with_reordering=True)
 
         # pcie wishbone bridge
-        self.submodules.pcie_wishbone = LitePCIeWishboneBridge(self.pcie_endpoint, lambda a: 1)
-        self.add_wb_master(self.pcie_wishbone.wishbone)
+        self.add_cpu_or_bridge(LitePCIeWishboneBridge(self.pcie_endpoint, lambda a: 1))
+        self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         # pcie dma
         self.submodules.dma = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
