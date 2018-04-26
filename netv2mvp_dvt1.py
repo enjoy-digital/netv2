@@ -8,11 +8,11 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 from litex.build.generic_platform import *
 from litex.build.xilinx import XilinxPlatform
 
-from litex.soc.integration.soc_core import mem_decoder
+from litex.soc.integration.soc_core import *
 from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
 from litex.soc.integration.cpu_interface import get_csr_header
-from litex.soc.cores import dna, xadc, timer
+from litex.soc.cores import dna, xadc, timer, uart
 
 from litedram.modules import MT41J128M16
 from litedram.phy import a7ddrphy
@@ -130,7 +130,7 @@ _io = [
      ("sdcard", 0,
         Subsignal("data", Pins("L15 L16 K14 M13"), Misc("PULLUP True")),
         Subsignal("cmd", Pins("L13"), Misc("PULLUP True")),
-        Subsignal("clk", Pins("K19")),
+        Subsignal("clk", Pins("A18")), # FIXME: wire between HAX_8 and SDCLK 
         IOStandard("LVCMOS33"), Misc("SLEW=FAST")
     ),
 ]
@@ -304,7 +304,7 @@ class EtherboneSoC(BaseSoC):
             self.ethphy.crg.cd_eth_tx.clk)
 
 
-class SDCardSoC(EtherboneSoC):
+class SDCardSoC(SoCCore):
     csr_peripherals = [
         "sdclk",
         "sdphy",
@@ -315,22 +315,32 @@ class SDCardSoC(EtherboneSoC):
         "bist_checker",
         "analyzer",
     ]
-    csr_map_update(EtherboneSoC.csr_map, csr_peripherals)
+    csr_map_update(SoCCore.csr_map, csr_peripherals)
 
-    def __init__(self, platform):
+    def __init__(self, platform, with_bist=False):
         clk_freq = int(100e6)
         sd_freq = int(100e6)
-        EtherboneSoC.__init__(self, platform)
+        SoCCore.__init__(self, platform, clk_freq,
+            cpu_type=None,
+            csr_data_width=32,
+            with_uart=None,
+            with_timer=None,
+            ident="NeTV2DVT1 SDCard LiteX Test SoC", ident_version=True)
+
+        self.submodules.crg = CRG(platform)
+
+        # bridge
+        self.add_cpu_or_bridge(uart.UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))
+        self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         # sd
         self.submodules.sdclk = SDClockerS7()
         self.submodules.sdphy = SDPHY(platform.request("sdcard"), platform.device)
         self.submodules.sdcore = SDCore(self.sdphy)
         self.submodules.sdtimer = timer.Timer()
-
+       
         self.submodules.bist_generator = BISTBlockGenerator(random=True)
         self.submodules.bist_checker = BISTBlockChecker(random=True)
-
         self.comb += [
             self.sdcore.source.connect(self.bist_checker.sink),
             self.bist_generator.source.connect(self.sdcore.sink)
@@ -344,6 +354,11 @@ class SDCardSoC(EtherboneSoC):
             self.sdclk.cd_sd_fb.clk)
 
         # led blinking (sys)
+        sys_counter = Signal(32)
+        self.sync.sys += sys_counter.eq(sys_counter + 1)
+        self.comb += platform.request("user_led", 0).eq(sys_counter[26])
+
+        # led blinking (sd)
         sd_counter = Signal(32)
         self.sync.sd += sd_counter.eq(sd_counter + 1)
         self.comb += platform.request("user_led", 1).eq(sd_counter[26])
