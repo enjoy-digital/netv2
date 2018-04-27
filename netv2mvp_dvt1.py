@@ -130,7 +130,7 @@ _io = [
      ("sdcard", 0,
         Subsignal("data", Pins("L15 L16 K14 M13"), Misc("PULLUP True")),
         Subsignal("cmd", Pins("L13"), Misc("PULLUP True")),
-        Subsignal("clk", Pins("A18")), # FIXME: wire between HAX_8 and SDCLK 
+        Subsignal("clk", Pins("K18")), 
         IOStandard("LVCMOS33"), Misc("SLEW=FAST")
     ),
 ]
