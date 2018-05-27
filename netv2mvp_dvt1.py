@@ -130,7 +130,7 @@ _io = [
      ("sdcard", 0,
         Subsignal("data", Pins("L15 L16 K14 M13"), Misc("PULLUP True")),
         Subsignal("cmd", Pins("L13"), Misc("PULLUP True")),
-        Subsignal("clk", Pins("K18")), 
+        Subsignal("clk", Pins("K18")),
         IOStandard("LVCMOS33"), Misc("SLEW=FAST")
     ),
 ]
@@ -180,8 +180,8 @@ class CRG(Module):
         pll_sys = Signal()
         pll_sys4x = Signal()
         pll_sys4x_dqs = Signal()
+        pll_eth = Signal()
         pll_clk200 = Signal()
-        pll_clk50 = Signal()
         self.specials += [
             Instance("PLLE2_BASE",
                      p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
@@ -203,24 +203,25 @@ class CRG(Module):
                      p_CLKOUT2_DIVIDE=4, p_CLKOUT2_PHASE=90.0,
                      o_CLKOUT2=pll_sys4x_dqs,
 
-                     # 200 MHz
-                     p_CLKOUT3_DIVIDE=8, p_CLKOUT3_PHASE=0.0,
-                     o_CLKOUT3=pll_clk200,
-
                      # 50 MHz
-                     p_CLKOUT4_DIVIDE=32, p_CLKOUT4_PHASE=0.0,
-                     o_CLKOUT4=pll_clk50,
+                     p_CLKOUT3_DIVIDE=32, p_CLKOUT3_PHASE=0.0,
+                     o_CLKOUT3=pll_eth,
+
+                     # 200 MHz
+                     p_CLKOUT4_DIVIDE=8, p_CLKOUT4_PHASE=0.0,
+                     o_CLKOUT4=pll_clk200
+
             ),
             Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
             Instance("BUFG", i_I=pll_sys, o_O=self.cd_clk100.clk),
             Instance("BUFG", i_I=pll_clk200, o_O=self.cd_clk200.clk),
             Instance("BUFG", i_I=pll_sys4x, o_O=self.cd_sys4x.clk),
             Instance("BUFG", i_I=pll_sys4x_dqs, o_O=self.cd_sys4x_dqs.clk),
-            Instance("BUFG", i_I=pll_clk50, o_O=self.cd_eth.clk),
+            Instance("BUFG", i_I=pll_eth, o_O=self.cd_eth.clk),
             AsyncResetSynchronizer(self.cd_sys, ~pll_locked),
-            AsyncResetSynchronizer(self.cd_clk200, ~pll_locked),
             AsyncResetSynchronizer(self.cd_clk100, ~pll_locked),
             AsyncResetSynchronizer(self.cd_eth, ~pll_locked),
+            AsyncResetSynchronizer(self.cd_clk200, ~pll_locked)
         ]
 
         reset_counter = Signal(4, reset=15)
@@ -283,25 +284,31 @@ class EtherboneSoC(BaseSoC):
     def __init__(self, platform, mac_address=0x10e2d5000000, ip_address="192.168.1.50"):
         BaseSoC.__init__(self, platform, cpu_type=None, csr_data_width=32, l2_size=64)
 
+
         # ethernet mac/udp/ip stack
-        self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"),
-                                                self.platform.request("eth"))
-        self.submodules.ethcore = LiteEthUDPIPCore(self.ethphy,
-                                                   mac_address,
-                                                   convert_ip(ip_address),
-                                                   self.clk_freq,
-                                                   with_icmp=True)
+        ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"),
+                                self.platform.request("eth"))
+        ethphy = ClockDomainsRenamer("eth")(ethphy)
+        ethcore = LiteEthUDPIPCore(ethphy,
+                                   mac_address=0x10e2d5000000,
+                                   ip_address=convert_ip("192.168.1.50"),
+                                   clk_freq=int(50e6))
+        ethcore = ClockDomainsRenamer("eth")(ethcore)
+        self.submodules += ethphy, ethcore
 
         # etherbone bridge
-        self.add_cpu_or_bridge(LiteEthEtherbone(self.ethcore.udp, 1234))
+        etherbone_cd = ClockDomain("etherbone") # FIXME: similar to sys but need for
+        self.clock_domains += etherbone_cd      # correct clock domain renaiming
+        self.comb += [
+            etherbone_cd.clk.eq(ClockSignal("sys")),
+            etherbone_cd.rst.eq(ResetSignal("sys"))
+        ]
+        self.add_cpu_or_bridge(LiteEthEtherbone(ethcore.udp, 1234, cd="etherbone"))
         self.add_wb_master(self.cpu_or_bridge.wishbone.bus)
 
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            self.ethphy.crg.cd_eth_rx.clk)
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            self.ethphy.crg.cd_eth_tx.clk)
+            self.crg.cd_eth.clk)
 
 
 class SDCardSoC(SoCCore):
@@ -338,7 +345,7 @@ class SDCardSoC(SoCCore):
         self.submodules.sdphy = SDPHY(platform.request("sdcard"), platform.device)
         self.submodules.sdcore = SDCore(self.sdphy)
         self.submodules.sdtimer = timer.Timer()
-       
+
         self.submodules.bist_generator = BISTBlockGenerator(random=True)
         self.submodules.bist_checker = BISTBlockChecker(random=True)
         self.comb += [
