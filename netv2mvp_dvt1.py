@@ -20,6 +20,7 @@ from litedram.core import ControllerSettings
 
 from liteeth.common import convert_ip
 from liteeth.phy.rmii import LiteEthPHYRMII
+from liteeth.core.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
@@ -246,7 +247,7 @@ class BaseSoC(SoCSDRAM):
     def __init__(self, platform, **kwargs):
         clk_freq = int(100e6)
         SoCSDRAM.__init__(self, platform, clk_freq,
-            integrated_rom_size=0x6000,
+            integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
             ident="NeTV2DVT1 LiteX Test SoC", ident_version="True",
             reserve_nmi_interrupt=False,
@@ -272,6 +273,39 @@ class BaseSoC(SoCSDRAM):
         sys_counter = Signal(32)
         self.sync.sys += sys_counter.eq(sys_counter + 1)
         self.comb += platform.request("user_led", 0).eq(sys_counter[26])
+
+
+class EthernetSoC(BaseSoC):
+    csr_peripherals = [
+        "ethphy",
+        "ethmac",
+    ]
+    csr_map_update(BaseSoC.csr_map, csr_peripherals)
+
+    interrupt_map = {
+        "ethmac": 3,
+    }
+    interrupt_map.update(BaseSoC.interrupt_map)
+
+    mem_map = {
+        "ethmac": 0x30000000,  # (shadow @0xb0000000)
+    }
+    mem_map.update(BaseSoC.mem_map)
+
+    def __init__(self, *args, **kwargs):
+        BaseSoC.__init__(self, *args, **kwargs)
+
+        # ethernet mac
+        self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"),
+                                                self.platform.request("eth"))
+        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
+        self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
+        self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
+
+        self.crg.cd_eth.clk.attr.add("keep")
+        self.platform.add_false_path_constraints(
+            self.crg.cd_sys.clk,
+            self.crg.cd_eth.clk)
 
 
 class EtherboneSoC(BaseSoC):
@@ -429,10 +463,12 @@ class PCIeSoC(BaseSoC):
 def main():
     platform = Platform()
     if len(sys.argv) < 2:
-        print("missing target (base or etherbone or sdcard or pcie)")
+        print("missing target (base or ethernet or etherbone or sdcard or pcie)")
         exit()
     if sys.argv[1] == "base":
         soc = BaseSoC(platform)
+    if sys.argv[1] == "ethernet":
+        soc = EthernetSoC(platform)
     elif sys.argv[1] == "etherbone":
         soc = EtherboneSoC(platform)
     elif sys.argv[1] == "sdcard":
