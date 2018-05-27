@@ -3,8 +3,13 @@ NETV2_DIR=../build
 include $(NETV2_DIR)/software/include/generated/variables.mak
 include $(SOC_DIRECTORY)/software/common.mak
 
+UIPDIR=uip
+LIBUIPDIR=libuip
+
 OBJECTS=isr.o \
 		config.o \
+		ethernet.o \
+		etherbone.o \
 		processor.o \
 		hdmi_in0.o \
 		hdmi_in1.o \
@@ -20,7 +25,7 @@ OBJECTS=isr.o \
 		dump.o \
 		stdio_wrap.o
 
-CFLAGS += -I.
+CFLAGS += -I. -I$(UIPDIR) -I$(LIBUIPDIR)
 
 all: firmware.bin
 
@@ -32,7 +37,7 @@ all: firmware.bin
 	chmod -x $@
 	cp $@ boot.bin
 
-firmware.elf: $(OBJECTS)
+firmware.elf: $(OBJECTS) libs
 	$(LD) $(LDFLAGS) \
 		-T linker.ld \
 		-N -o $@ \
@@ -40,7 +45,8 @@ firmware.elf: $(OBJECTS)
 		$(OBJECTS) \
 		-L$(NETV2_DIR)/software/libbase \
 		-L$(NETV2_DIR)/software/libcompiler_rt \
-		-lbase-nofloat -lcompiler_rt
+		-L$(LIBUIPDIR) \
+		-lbase-nofloat -luip -lcompiler_rt
 	chmod -x $@
 
 main.o: main.c
@@ -51,6 +57,9 @@ main.o: main.c
 
 %.o: %.S
 	$(assemble)
+
+libs:
+	$(MAKE) -C $(LIBUIPDIR)
 
 load: firmware.bin
 	litex_term --kernel firmware.bin COM8

@@ -13,9 +13,14 @@
 
 #include "config.h"
 #include "ci.h"
+#include "ethernet.h"
+#include "etherbone.h"
 #include "processor.h"
 #include "pattern.h"
 
+
+static const unsigned char mac_addr[6] = {0x10, 0xe2, 0xd5, 0x00, 0x00, 0x00};
+static const unsigned char ip_addr[4] = {192, 168, 1, 50};
 
 int main(void)
 {
@@ -30,6 +35,11 @@ int main(void)
 
 	config_init();
 	time_init();
+
+#ifdef ETHMAC_BASE
+	ethernet_init(mac_addr, ip_addr);
+	etherbone_init();
+#endif
 
 	processor_init();
 	processor_update();
@@ -54,6 +64,9 @@ int main(void)
 		processor_service();
 		ci_service();
 		pattern_service();
+#ifdef ETHMAC_BASE
+		ethernet_service();
+#endif
 	}
 
 	return 0;
