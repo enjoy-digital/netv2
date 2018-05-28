@@ -621,7 +621,7 @@ class VideoRawDMALoopbackSoC(BaseSoC):
             self.hdmi_out0_phy.sink.c1,
             self.hdmi_out0_phy.sink.c2
         ]
-#        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, cd="pix", cd_ratio=2)
+#        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, cd="pix")
 
     def do_exit(self, vns):
         self.analyzer.export_csv(vns, "test/analyzer.csv")
