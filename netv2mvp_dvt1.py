@@ -50,10 +50,66 @@ _io = [
         IOStandard("LVCMOS33"),
     ),
 
+    ("ddram_m0", 0,
+        Subsignal("a", Pins(
+            "U6 V4 W5 V5 AA1 Y2 AB1 AB3",
+            "AB2 Y3 W6 Y1 V2 AA3"
+            ),
+            IOStandard("SSTL15")),
+        Subsignal("ba", Pins("U5 W4 V7"), IOStandard("SSTL15")),
+        Subsignal("ras_n", Pins("Y9"), IOStandard("SSTL15")),
+        Subsignal("cas_n", Pins("Y7"), IOStandard("SSTL15")),
+        Subsignal("we_n", Pins("V8"), IOStandard("SSTL15")),
+        Subsignal("dm", Pins("G1 H4"), IOStandard("SSTL15")),
+        Subsignal("dq", Pins(
+            "N2 M6 P1 N5 P2 N4 R1 P6 "
+            "K3 M2 K4 M3 J6 L5 J4 K6 "
+            ),
+            IOStandard("SSTL15"),
+            Misc("IN_TERM=UNTUNED_SPLIT_50")),
+        Subsignal("dqs_p", Pins("E1 K2"), IOStandard("DIFF_SSTL15")),
+        Subsignal("dqs_n", Pins("D1 J2"), IOStandard("DIFF_SSTL15")),
+        Subsignal("clk_p", Pins("R3"), IOStandard("DIFF_SSTL15")),
+        Subsignal("clk_n", Pins("R2"), IOStandard("DIFF_SSTL15")),
+        Subsignal("cke", Pins("Y8"), IOStandard("SSTL15")),
+        Subsignal("odt", Pins("W9"), IOStandard("SSTL15")),
+        Subsignal("reset_n", Pins("AB5"), IOStandard("LVCMOS15")),
+        Subsignal("cs_n", Pins("V9"), IOStandard("SSTL15")),
+        Misc("SLEW=FAST"),
+    ),
+
+    ("ddram_m1", 0,
+        Subsignal("a", Pins(
+            "U6 V4 W5 V5 AA1 Y2 AB1 AB3",
+            "AB2 Y3 W6 Y1 V2 AA3"
+            ),
+            IOStandard("SSTL15")),
+        Subsignal("ba", Pins("U5 W4 V7"), IOStandard("SSTL15")),
+        Subsignal("ras_n", Pins("Y9"), IOStandard("SSTL15")),
+        Subsignal("cas_n", Pins("Y7"), IOStandard("SSTL15")),
+        Subsignal("we_n", Pins("V8"), IOStandard("SSTL15")),
+        Subsignal("dm", Pins("M5 L3"), IOStandard("SSTL15")),
+        Subsignal("dq", Pins(
+            "N2 M6 P1 N5 P2 N4 R1 P6 "
+            "K3 M2 K4 M3 J6 L5 J4 K6 "
+            ),
+            IOStandard("SSTL15"),
+            Misc("IN_TERM=UNTUNED_SPLIT_50")),
+        Subsignal("dqs_p", Pins("P5 M1"), IOStandard("DIFF_SSTL15")),
+        Subsignal("dqs_n", Pins("P4 L1"), IOStandard("DIFF_SSTL15")),
+        Subsignal("clk_p", Pins("R3"), IOStandard("DIFF_SSTL15")),
+        Subsignal("clk_n", Pins("R2"), IOStandard("DIFF_SSTL15")),
+        Subsignal("cke", Pins("Y8"), IOStandard("SSTL15")),
+        Subsignal("odt", Pins("W9"), IOStandard("SSTL15")),
+        Subsignal("reset_n", Pins("AB5"), IOStandard("LVCMOS15")),
+        Subsignal("cs_n", Pins("V9"), IOStandard("SSTL15")),
+        Misc("SLEW=FAST"),
+    ),
+
     ("ddram", 0,
         Subsignal("a", Pins(
             "U6 V4 W5 V5 AA1 Y2 AB1 AB3",
-			"AB2 Y3 W6 Y1 V2 AA3"
+            "AB2 Y3 W6 Y1 V2 AA3"
             ),
             IOStandard("SSTL15")),
         Subsignal("ba", Pins("U5 W4 V7"), IOStandard("SSTL15")),
@@ -258,7 +314,7 @@ class BaseSoC(SoCSDRAM):
         self.submodules.xadc = xadc.XADC()
 
         # sdram
-        self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram"))
+        self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram_m1"))
         sdram_module = MT41J128M16(self.clk_freq, "1:4")
         self.add_constant("READ_LEVELING_BITSLIP", 3)
         self.add_constant("READ_LEVELING_DELAY", 14)
