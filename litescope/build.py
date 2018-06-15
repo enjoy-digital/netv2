@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from migen import *
 
 from litex.build.tools import write_to_file
