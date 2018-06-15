@@ -492,8 +492,8 @@ class ICAPSoC(SoCCore):
 class PCIeSoC(BaseSoC):
     csr_peripherals = [
         "pcie_phy",
-        "dma",
-        "msi",
+        "pcie_dma",
+        "pcie_msi",
         "dram_dma_writer",
         "dram_dma_reader"
     ]
@@ -503,7 +503,7 @@ class PCIeSoC(BaseSoC):
     BaseSoC.mem_map["rom"] = 0x20000000
 
     def __init__(self, platform, **kwargs):
-        BaseSoC.__init__(self, platform, cpu_type=None, csr_data_width=32, shadow_base=0x00000000,**kwargs)
+        BaseSoC.__init__(self, platform, cpu_type=None, csr_data_width=32, shadow_base=0x00000000, **kwargs)
 
         # pcie phy
         self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x2"))
@@ -519,17 +519,17 @@ class PCIeSoC(BaseSoC):
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         # pcie dma
-        self.submodules.dma = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
+        self.submodules.pcie_dma = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
 
         # pcie msi
-        self.submodules.msi = LitePCIeMSI()
-        self.comb += self.msi.source.connect(self.pcie_phy.msi)
+        self.submodules.pcie_msi = LitePCIeMSI()
+        self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
         self.interrupts = {
-            "DMA_WRITER":    self.dma.writer.irq,
-            "DMA_READER":    self.dma.reader.irq
+            "PCIE_DMA_WRITER":    self.pcie_dma.writer.irq,
+            "PCIE_DMA_READER":    self.pcie_dma.reader.irq
         }
         for i, (k, v) in enumerate(sorted(self.interrupts.items())):
-            self.comb += self.msi.irqs[i].eq(v)
+            self.comb += self.pcie_msi.irqs[i].eq(v)
             self.add_constant(k + "_INTERRUPT", i)
 
         # led blinking (pcie)

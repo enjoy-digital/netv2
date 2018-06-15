@@ -326,8 +326,8 @@ class BaseSoC(SoCSDRAM):
 class PCIeSoC(BaseSoC):
     csr_peripherals = [
         "pcie_phy",
-        "dma",
-        "msi",
+        "pcie_dma",
+        "pcie_msi",
         "dram_dma_writer",
         "dram_dma_reader"
     ]
@@ -337,7 +337,7 @@ class PCIeSoC(BaseSoC):
     BaseSoC.mem_map["rom"] = 0x20000000
 
     def __init__(self, platform, **kwargs):
-        BaseSoC.__init__(self, platform, csr_data_width=32, **kwargs)
+        BaseSoC.__init__(self, platform, cpu_type=None, csr_data_width=32, shadow_base=0x00000000, **kwargs)
 
         # pcie phy
         self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x2"))
@@ -349,36 +349,27 @@ class PCIeSoC(BaseSoC):
         self.submodules.pcie_endpoint = LitePCIeEndpoint(self.pcie_phy, with_reordering=True)
 
         # pcie wishbone bridge
-        self.submodules.pcie_wishbone = LitePCIeWishboneBridge(self.pcie_endpoint, lambda a: 1)
-        self.add_wb_master(self.pcie_wishbone.wishbone)
+        self.add_cpu_or_bridge(LitePCIeWishboneBridge(self.pcie_endpoint, lambda a: 1))
+        self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         # pcie dma
-        self.submodules.dma = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
-        dram_dma_writer = DMAWriter(self.sdram.crossbar.get_port(mode="write", dw=64))
-        dram_dma_reader = DMAReader(self.sdram.crossbar.get_port(mode="read", dw=64))
-        self.submodules += dram_dma_writer, dram_dma_reader
-        self.submodules.dram_dma_writer = DMAControl(dram_dma_writer)
-        self.submodules.dram_dma_reader = DMAControl(dram_dma_reader)
-        self.comb += [
-            self.dma.source.connect(dram_dma_writer.sink),
-            dram_dma_reader.source.connect(self.dma.sink)
-        ]
+        self.submodules.pcie_dma = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
 
         # pcie msi
-        self.submodules.msi = LitePCIeMSI()
-        self.comb += self.msi.source.connect(self.pcie_phy.msi)
+        self.submodules.pcie_msi = LitePCIeMSI()
+        self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
         self.interrupts = {
-            "DMA_WRITER":    self.dma.writer.irq,
-            "DMA_READER":    self.dma.reader.irq
+            "PCIE_DMA_WRITER":    self.pcie_dma.writer.irq,
+            "PCIE_DMA_READER":    self.pcie_dma.reader.irq
         }
         for i, (k, v) in enumerate(sorted(self.interrupts.items())):
-            self.comb += self.msi.irqs[i].eq(v)
+            self.comb += self.pcie_msi.irqs[i].eq(v)
             self.add_constant(k + "_INTERRUPT", i)
 
-        # pcie led
+        # led blinking (pcie)
         pcie_counter = Signal(32)
         self.sync.pcie += pcie_counter.eq(pcie_counter + 1)
-        self.comb += self.pcie_led.eq(pcie_counter[26])
+        self.comb += platform.request("user_led", 1).eq(pcie_counter[26])
 
     def generate_software_header(self):
         csr_header = get_csr_header(self.get_csr_regions(),
