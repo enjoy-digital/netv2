@@ -26,8 +26,32 @@ int64_t get_time_ms(void);
 
 uint32_t netv2_readl(int fd, uint32_t addr);
 void netv2_writel(int fd, uint32_t addr, uint32_t val);
+void netv2_reload(int fd);
 void netv2_dma(int fd, uint8_t fill, uint8_t rx_tx_loopback_enable, uint8_t tx_rx_loopback_enable);
 void netv2_dma_reader(int fd, uint8_t enable, int64_t *hw_count, int64_t *sw_count);
 void netv2_dma_writer(int fd, uint8_t enable, int64_t *hw_count, int64_t *sw_count);
+
+/* flash */
+
+#define FLASH_READ_ID 0x9E
+#define FLASH_READ    0x03
+#define FLASH_WREN    0x06
+#define FLASH_WRDI    0x04
+#define FLASH_PP      0x02
+#define FLASH_SE      0xD8
+#define FLASH_BE      0xC7
+#define FLASH_RDSR    0x05
+#define FLASH_WRSR    0x01
+/* status */
+#define FLASH_WIP     0x01
+
+#define FLASH_SECTOR_SIZE (1 << 16)
+
+uint8_t netv2_flash_read(int fd, uint32_t addr);
+int netv2_flash_get_erase_block_size(int fd);
+void netv2_flash_write(int fd,
+                     const uint8_t *buf, uint32_t base, uint32_t size,
+                     void (*progress_cb)(void *opaque, const char *fmt, ...),
+                     void *opaque);
 
 #endif /* NETV2_LIB_H */

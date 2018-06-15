@@ -533,6 +533,25 @@ static unsigned int netv2_poll(struct file *file, poll_table *wait)
     return mask;
 }
 
+/* SPI */
+
+static int netv2_flash_spi(struct netv2_device *s, struct netv2_ioctl_flash *m)
+{
+    if (m->tx_len < 8 || m->tx_len > 40)
+        return -EINVAL;
+
+    netv2_writel(s, CSR_FLASH_SPI_MOSI_ADDR, m->tx_data >> 32);
+    netv2_writel(s, CSR_FLASH_SPI_MOSI_ADDR + 4, m->tx_data);
+    netv2_writel(s, CSR_FLASH_SPI_CTRL_ADDR,
+               SPI_CTRL_START | (m->tx_len * SPI_CTRL_LENGTH));
+    udelay(16);
+    while ((netv2_readl(s, CSR_FLASH_SPI_STATUS_ADDR) & SPI_STATUS_DONE) == 0)
+        udelay(1);
+    m->rx_data = ((uint64_t)netv2_readl(s, CSR_FLASH_SPI_MISO_ADDR) << 32) |
+        netv2_readl(s, CSR_FLASH_SPI_MISO_ADDR + 4);
+    return 0;
+}
+
 static long netv2_ioctl(struct file *file, unsigned int cmd,
                       unsigned long arg)
 {
@@ -559,6 +578,37 @@ static long netv2_ioctl(struct file *file, unsigned int cmd,
                 ret = -EFAULT;
                 break;
             }
+        }
+        break;
+    case NETV2_IOCTL_FLASH:
+        {
+            struct netv2_ioctl_flash m;
+
+            if (copy_from_user(&m, (void *)arg, sizeof(m))) {
+                ret = -EFAULT;
+                break;
+            }
+            ret = netv2_flash_spi(chan->netv2_dev, &m);
+            if (ret == 0) {
+                if (copy_to_user((void *)arg, &m, sizeof(m))) {
+                    ret = -EFAULT;
+                    break;
+                }
+            }
+        }
+        break;
+    case NETV2_IOCTL_ICAP:
+        {
+            struct netv2_ioctl_icap m;
+
+            if (copy_from_user(&m, (void *)arg, sizeof(m))) {
+                ret = -EFAULT;
+                break;
+            }
+
+            netv2_writel(chan->netv2_dev, CSR_ICAP_ADDR_ADDR, m.addr);
+			netv2_writel(chan->netv2_dev, CSR_ICAP_DATA_ADDR, m.data);
+			netv2_writel(chan->netv2_dev, CSR_ICAP_SEND_ADDR, 1);
         }
         break;
     case NETV2_IOCTL_DMA:

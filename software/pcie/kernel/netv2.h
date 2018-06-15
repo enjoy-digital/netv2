@@ -30,6 +30,17 @@ struct netv2_ioctl_reg {
     uint8_t is_write;
 };
 
+struct netv2_ioctl_flash {
+    int tx_len; /* 8 to 40 */
+    __u64 tx_data; /* 8 to 40 bits */
+    __u64 rx_data; /* 40 bits */
+};
+
+struct netv2_ioctl_icap {
+    uint8_t addr;
+    uint32_t data;
+};
+
 struct netv2_ioctl_dma {
     uint8_t fill;
     uint8_t tx_rx_loopback_enable;
@@ -51,6 +62,8 @@ struct netv2_ioctl_dma_reader {
 #define NETV2_IOCTL 'S'
 
 #define NETV2_IOCTL_REG               _IOWR(NETV2_IOCTL,  0, struct netv2_ioctl_reg)
+#define NETV2_IOCTL_FLASH             _IOWR(NETV2_IOCTL,  1, struct netv2_ioctl_flash)
+#define NETV2_IOCTL_ICAP              _IOWR(NETV2_IOCTL,  2, struct netv2_ioctl_icap)
 
 #define NETV2_IOCTL_DMA               _IOW(NETV2_IOCTL,  10, struct netv2_ioctl_dma)
 #define NETV2_IOCTL_DMA_WRITER        _IOWR(NETV2_IOCTL, 11, struct netv2_ioctl_dma_writer)
