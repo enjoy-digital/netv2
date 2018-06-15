@@ -492,7 +492,7 @@ class ICAPSoC(SoCCore):
 class PCIeSoC(BaseSoC):
     csr_peripherals = [
         "pcie_phy",
-        "pcie_dma",
+        "pcie_dma0",
         "pcie_msi",
         "dram_dma_writer",
         "dram_dma_reader"
@@ -519,14 +519,14 @@ class PCIeSoC(BaseSoC):
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         # pcie dma
-        self.submodules.pcie_dma = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
+        self.submodules.pcie_dma0 = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
 
         # pcie msi
         self.submodules.pcie_msi = LitePCIeMSI()
         self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
         self.interrupts = {
-            "PCIE_DMA_WRITER":    self.pcie_dma.writer.irq,
-            "PCIE_DMA_READER":    self.pcie_dma.reader.irq
+            "PCIE_DMA0_WRITER":    self.pcie_dma0.writer.irq,
+            "PCIE_DMA0_READER":    self.pcie_dma0.reader.irq
         }
         for i, (k, v) in enumerate(sorted(self.interrupts.items())):
             self.comb += self.pcie_msi.irqs[i].eq(v)
@@ -563,7 +563,7 @@ def main():
         soc = PCIeSoC(platform)
     else:
     	ValueError
-    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv")
+    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv", compile_gateware=False)
     vns = builder.build()
     soc.do_exit(vns)
 
