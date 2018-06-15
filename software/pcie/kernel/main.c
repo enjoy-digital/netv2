@@ -673,8 +673,8 @@ static int netv2_alloc_chdev(struct netv2_device *s)
 
     index = netv2_minor_idx;
     for(i = 0; i < DMA_CHANNEL_COUNT; i++) {
-        printk(KERN_INFO NETV2_NAME " Creating /dev/pcie_netv2%d\n", index);
-        if(!device_create(netv2_class, NULL, MKDEV(netv2_major, index), NULL, "pcie_netv2%d", index)) {
+        printk(KERN_INFO NETV2_NAME " Creating /dev/netv2%d\n", index);
+        if(!device_create(netv2_class, NULL, MKDEV(netv2_major, index), NULL, "netv2%d", index)) {
             ret = -EINVAL;
             printk(KERN_ERR NETV2_NAME " Failed to create device\n");
             goto fail_create;
