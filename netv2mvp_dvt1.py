@@ -34,6 +34,8 @@ from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
 from litepcie.frontend.dma import LitePCIeDMA
 from litepcie.frontend.wishbone import LitePCIeWishboneBridge
 
+from gateware.icap import ICAP
+
 _io = [
     ("clk50", 0, Pins("J19"), IOStandard("LVCMOS33")),
 
@@ -461,6 +463,32 @@ class SDCardSoC(SoCCore):
         self.comb += platform.request("user_led", 1).eq(sd_counter[26])
 
 
+class ICAPSoC(SoCCore):
+    csr_peripherals = [
+        "icap",
+        "analyzer",
+    ]
+    csr_map_update(SoCCore.csr_map, csr_peripherals)
+
+    def __init__(self, platform, with_bist=False):
+        clk_freq = int(100e6)
+        SoCCore.__init__(self, platform, clk_freq,
+            cpu_type=None,
+            csr_data_width=32,
+            with_uart=None,
+            with_timer=None,
+            ident="NeTV2DVT1 ICAP LiteX Test SoC", ident_version=True)
+
+        self.submodules.crg = CRG(platform)
+
+        # bridge
+        self.add_cpu_or_bridge(uart.UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))
+        self.add_wb_master(self.cpu_or_bridge.wishbone)
+
+        # icap
+        self.submodules.icap = ICAP(platform)
+
+
 class PCIeSoC(BaseSoC):
     csr_peripherals = [
         "pcie_phy",
@@ -519,7 +547,7 @@ class PCIeSoC(BaseSoC):
 def main():
     platform = Platform()
     if len(sys.argv) < 2:
-        print("missing target (base or ethernet or etherbone or sdcard or pcie)")
+        print("missing target:(base or ethernet or etherbone or sdcard or icap or pcie)")
         exit()
     if sys.argv[1] == "base":
         soc = BaseSoC(platform)
@@ -529,6 +557,8 @@ def main():
         soc = EtherboneSoC(platform)
     elif sys.argv[1] == "sdcard":
         soc = SDCardSoC(platform)
+    elif sys.argv[1] == "icap":
+        soc = ICAPSoC(platform)
     elif sys.argv[1] == "pcie":
         soc = PCIeSoC(platform)
     else:
