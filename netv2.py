@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
+import math
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
@@ -35,6 +36,7 @@ from litepcie.frontend.dma import LitePCIeDMA
 from litepcie.frontend.wishbone import LitePCIeWishboneBridge
 
 from gateware.icap import ICAP
+from gateware.flash import Flash
 
 _io = [
     ("clk50", 0, Pins("J19"), IOStandard("LVCMOS33")),
@@ -45,6 +47,15 @@ _io = [
     ("user_led", 3, Pins("AA21"), IOStandard("LVCMOS33")),
     ("user_led", 4, Pins("R19"), IOStandard("LVCMOS33")),
     ("user_led", 5, Pins("M16"), IOStandard("LVCMOS33")),
+
+    ("flash", 0,
+        Subsignal("cs_n", Pins("T19")),
+        Subsignal("mosi", Pins("P22")),
+        Subsignal("miso", Pins("R22")),
+        Subsignal("vpp", Pins("P21")),
+        Subsignal("hold", Pins("R21")),
+        IOStandard("LVCMOS33")
+    ),
 
     ("serial", 0,
         Subsignal("tx", Pins("E14")),
@@ -299,6 +310,8 @@ class BaseSoC(SoCSDRAM):
         "ddrphy",
         "dna",
         "xadc",
+        "flash",
+        "icap",
     ]
     csr_map_update(SoCSDRAM.csr_map, csr_peripherals)
 
@@ -307,13 +320,24 @@ class BaseSoC(SoCSDRAM):
         SoCSDRAM.__init__(self, platform, clk_freq,
             integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
-            ident="NeTV2DVT1 LiteX Test SoC", ident_version="True",
+            ident="NeTV2 LiteX Test SoC", ident_version="True",
             reserve_nmi_interrupt=False,
             **kwargs)
 
+        # crg
         self.submodules.crg = CRG(platform)
+
+        # dnax
         self.submodules.dna = dna.DNA()
+
+        # xadc
         self.submodules.xadc = xadc.XADC()
+
+        # icap
+        self.submodules.icap = ICAP(platform)
+
+        # flash
+        self.submodules.flash = Flash(platform.request("flash"), div=math.ceil(clk_freq/25e6))
 
         # sdram
         self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram_m1"))
@@ -424,7 +448,7 @@ class SDCardSoC(SoCCore):
             csr_data_width=32,
             with_uart=None,
             with_timer=None,
-            ident="NeTV2DVT1 SDCard LiteX Test SoC", ident_version=True)
+            ident="NeTV2 SDCard LiteX Test SoC", ident_version=True)
 
         self.submodules.crg = CRG(platform)
 
@@ -477,7 +501,7 @@ class ICAPSoC(SoCCore):
             csr_data_width=32,
             with_uart=None,
             with_timer=None,
-            ident="NeTV2DVT1 ICAP LiteX Test SoC", ident_version=True)
+            ident="NeTV2 ICAP LiteX Test SoC", ident_version=True)
 
         self.submodules.crg = CRG(platform)
 
@@ -493,9 +517,8 @@ class PCIeSoC(BaseSoC):
     csr_peripherals = [
         "pcie_phy",
         "pcie_dma0",
+        "pcie_dma1",
         "pcie_msi",
-        "dram_dma_writer",
-        "dram_dma_reader"
     ]
     csr_map_update(BaseSoC.csr_map, csr_peripherals)
 

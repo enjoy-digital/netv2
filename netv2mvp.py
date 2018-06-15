@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
+import math
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
@@ -8,7 +9,7 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 from litex.build.generic_platform import *
 from litex.build.xilinx import XilinxPlatform
 
-from litex.soc.integration.soc_core import mem_decoder
+from litex.soc.integration.soc_core import *
 from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
 from litex.soc.integration.cpu_interface import get_csr_header
@@ -30,8 +31,6 @@ from litevideo.output.hdmi.s7 import S7HDMIOutEncoderSerializer, S7HDMIOutPHY
 from litevideo.csc.ycbcr2rgb import YCbCr2RGB
 from litevideo.csc.ycbcr422to444 import YCbCr422to444
 
-from gateware.dma import DMAWriter, DMAReader, DMAControl
-
 from litedram.frontend.bist import LiteDRAMBISTGenerator
 from litedram.frontend.bist import LiteDRAMBISTChecker
 
@@ -42,6 +41,15 @@ _io = [
     ("user_led", 0, Pins("M21"), IOStandard("LVCMOS33")),
     ("user_led", 1, Pins("N20"), IOStandard("LVCMOS33")),
     ("user_led", 2, Pins("L21"), IOStandard("LVCMOS33")),
+
+    ("flash", 0,
+        Subsignal("cs_n", Pins("T19")),
+        Subsignal("mosi", Pins("P22")),
+        Subsignal("miso", Pins("R22")),
+        Subsignal("vpp", Pins("P21")),
+        Subsignal("hold", Pins("R21")),
+        IOStandard("LVCMOS33")
+    ),
 
     ("serial", 0,
         Subsignal("tx", Pins("E14")),
@@ -181,9 +189,8 @@ _io = [
 
 
 class Platform(XilinxPlatform):
-    def __init__(self, toolchain="vivado", programmer="vivado"):
-        XilinxPlatform.__init__(self, "xc7a35t-fgg484-2", _io,
-                                toolchain=toolchain)
+    def __init__(self):
+        XilinxPlatform.__init__(self, "xc7a35t-fgg484-2", _io, toolchain="vivado")
         self.toolchain.bitstream_commands = [
             "set_property CONFIG_VOLTAGE 3.3 [current_design]",
             "set_property CFGBVS VCCO [current_design]",
@@ -193,14 +200,10 @@ class Platform(XilinxPlatform):
         self.toolchain.additional_commands = \
             ["write_cfgmem -verbose -force -format bin -interface spix4 -size 16 "
              "-loadbit \"up 0x0 {build_name}.bit\" -file {build_name}.bin"]
-        self.programmer = programmer
 
         self.add_platform_command("""
 create_clock -name pcie_phy_clk -period 10.0 [get_pins {{pcie_phy/pcie_support_i/pcie_i/inst/inst/gt_top_i/pipe_wrapper_i/pipe_lane[0].gt_wrapper_i/gtp_channel.gtpe2_channel_i/TXOUTCLK}}]
 """)
-
-    def do_finalize(self, fragment):
-        XilinxPlatform.do_finalize(self, fragment)
 
 
 def csr_map_update(csr_map, csr_peripherals):
@@ -280,25 +283,34 @@ class BaseSoC(SoCSDRAM):
         "ddrphy",
         "dna",
         "xadc",
+        "flash",
+        "icap",
     ]
     csr_map_update(SoCSDRAM.csr_map, csr_peripherals)
 
     def __init__(self, platform, **kwargs):
         clk_freq = int(100e6)
         SoCSDRAM.__init__(self, platform, clk_freq,
-            integrated_rom_size=0x6000,
+            integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
-            #shadow_base=0x00000000,
-            ident="NeTV2 LiteX Base SoC",
+            ident="NeTV2 LiteX Test SoC", ident_version="True",
             reserve_nmi_interrupt=False,
             **kwargs)
 
+        # crg
         self.submodules.crg = CRG(platform)
+
+        # dnax
         self.submodules.dna = dna.DNA()
+
+        # xadc
         self.submodules.xadc = xadc.XADC()
 
-        self.crg.cd_sys.clk.attr.add("keep")
-        platform.add_period_constraint(self.crg.cd_sys.clk, period_ns(100e6))
+        # icap
+        self.submodules.icap = ICAP(platform)
+
+        # flash
+        self.submodules.flash = Flash(platform.request("flash"), div=math.ceil(clk_freq/25e6))
 
         # sdram
         self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram"))
@@ -631,7 +643,7 @@ def main():
         soc = VideoOverlaySoC(platform)
     elif sys.argv[1] == "video_raw_dma_loopback":
         soc = VideoRawDMALoopbackSoC(platform)
-    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv")
+    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv", compile_gateware=False)
     vns = builder.build()
     soc.do_exit(vns)
 
