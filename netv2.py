@@ -558,7 +558,7 @@ def main():
         soc = PCIeSoC(platform)
     else:
     	ValueError
-    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv", compile_gateware=False)
+    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv")
     vns = builder.build()
     soc.do_exit(vns)
 

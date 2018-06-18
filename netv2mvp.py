@@ -643,7 +643,7 @@ def main():
         soc = VideoOverlaySoC(platform)
     elif sys.argv[1] == "video_raw_dma_loopback":
         soc = VideoRawDMALoopbackSoC(platform)
-    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv", compile_gateware=False)
+    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv")
     vns = builder.build()
     soc.do_exit(vns)
 
