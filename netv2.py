@@ -500,7 +500,7 @@ class PCIeSoC(BaseSoC):
     BaseSoC.mem_map["rom"] = 0x20000000
 
     def __init__(self, platform, **kwargs):
-        BaseSoC.__init__(self, platform, cpu_type=None, csr_data_width=32, shadow_base=0x00000000, **kwargs)
+        BaseSoC.__init__(self, platform, csr_data_width=32, **kwargs)
 
         # pcie phy
         self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x2"))
@@ -512,8 +512,8 @@ class PCIeSoC(BaseSoC):
         self.submodules.pcie_endpoint = LitePCIeEndpoint(self.pcie_phy, with_reordering=True)
 
         # pcie wishbone bridge
-        self.add_cpu_or_bridge(LitePCIeWishboneBridge(self.pcie_endpoint, lambda a: 1))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
+        self.submodules.pcie_bridge = LitePCIeWishboneBridge(self.pcie_endpoint, lambda a: 1, shadow_base=0x80000000)
+        self.add_wb_master(self.pcie_bridge.wishbone)
 
         # pcie dma
         self.submodules.pcie_dma0 = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
@@ -537,7 +537,8 @@ class PCIeSoC(BaseSoC):
     def generate_software_header(self):
         csr_header = get_csr_header(self.get_csr_regions(),
                                     self.get_constants(),
-                                    with_access_functions=False)
+                                    with_access_functions=False,
+                                    with_shadow_base=False)
         tools.write_to_file(os.path.join("software", "pcie", "kernel", "csr.h"), csr_header)
 
 
