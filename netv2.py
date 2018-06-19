@@ -308,24 +308,51 @@ class CRG(Module):
         self.specials += Instance("IDELAYCTRL", i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
 
 
-class BaseSoC(SoCSDRAM):
+class NeTV2SoC(SoCSDRAM):
     csr_peripherals = [
-        "ddrphy",
         "dna",
         "xadc",
         "flash",
         "icap",
+
+        "ddrphy",
+
+        "ethphy",
+        "ethmac",
+
+        "pcie_phy",
+        "pcie_dma0",
+        "pcie_dma1",
+        "pcie_msi"
     ]
     csr_map_update(SoCSDRAM.csr_map, csr_peripherals)
 
-    def __init__(self, platform, **kwargs):
+    interrupt_map = {
+        "ethmac": 3,
+    }
+    interrupt_map.update(SoCSDRAM.interrupt_map)
+
+    mem_map = {
+        "ethmac": 0x30000000,
+    }
+    mem_map.update(SoCSDRAM.mem_map)
+
+    SoCSDRAM.mem_map["csr"] = 0x00000000
+    SoCSDRAM.mem_map["rom"] = 0x20000000
+
+    def __init__(self, platform,
+        with_sdram=True,
+        with_ethernet=True,
+        with_pcie=True):
         clk_freq = int(100e6)
         SoCSDRAM.__init__(self, platform, clk_freq,
+            cpu_type="lm32",
+            csr_data_width=32, csr_address_width=15,
             integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
+            integrated_main_ram_size=0x8000 if not with_sdram else 0,
             ident="NeTV2 LiteX Test SoC", ident_version="True",
-            reserve_nmi_interrupt=False,
-            **kwargs)
+            reserve_nmi_interrupt=False)
 
         # crg
         self.submodules.crg = CRG(platform)
@@ -343,199 +370,72 @@ class BaseSoC(SoCSDRAM):
         self.submodules.flash = Flash(platform.request("flash"), div=math.ceil(clk_freq/25e6))
 
         # sdram
-        self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram_m1"))
-        sdram_module = MT41J128M16(self.clk_freq, "1:4")
-        self.add_constant("READ_LEVELING_BITSLIP", 3)
-        self.add_constant("READ_LEVELING_DELAY", 14)
-        self.register_sdram(self.ddrphy,
-                            sdram_module.geom_settings,
-                            sdram_module.timing_settings,
-                            controller_settings=ControllerSettings(with_bandwidth=True,
-                                                                   cmd_buffer_depth=8,
-                                                                   with_refresh=False))
+        if with_sdram:
+            self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram"))
+            sdram_module = MT41J128M16(self.clk_freq, "1:4")
+            self.add_constant("READ_LEVELING_BITSLIP", 3)
+            self.add_constant("READ_LEVELING_DELAY", 14)
+            self.register_sdram(self.ddrphy,
+                                sdram_module.geom_settings,
+                                sdram_module.timing_settings,
+                                controller_settings=ControllerSettings(with_bandwidth=True,
+                                                                       cmd_buffer_depth=8,
+                                                                       with_refresh=True))
+        # ethernet
+        if with_ethernet:
+            self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"),
+                                                    self.platform.request("eth"))
+            self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
+            self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
+            self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
+
+            self.crg.cd_eth.clk.attr.add("keep")
+            self.platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                self.crg.cd_eth.clk)
+
+        # pcie
+        if with_pcie:
+            # pcie phy
+            self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x2"))
+            platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                self.pcie_phy.cd_pcie.clk)
+
+            # pcie endpoint
+            self.submodules.pcie_endpoint = LitePCIeEndpoint(self.pcie_phy, with_reordering=True)
+
+            # pcie wishbone bridge
+            self.submodules.pcie_bridge = LitePCIeWishboneBridge(self.pcie_endpoint, lambda a: 1, shadow_base=0x80000000)
+            self.add_wb_master(self.pcie_bridge.wishbone)
+
+            # pcie dma
+            self.submodules.pcie_dma0 = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
+
+            # pcie msi
+            self.submodules.pcie_msi = LitePCIeMSI()
+            self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
+            self.interrupts = {
+                "PCIE_DMA0_WRITER":    self.pcie_dma0.writer.irq,
+                "PCIE_DMA0_READER":    self.pcie_dma0.reader.irq
+            }
+            for i, (k, v) in enumerate(sorted(self.interrupts.items())):
+                self.comb += self.pcie_msi.irqs[i].eq(v)
+                self.add_constant(k + "_INTERRUPT", i)
+
 
         # led blinking (sys)
         sys_counter = Signal(32)
         self.sync.sys += sys_counter.eq(sys_counter + 1)
         self.comb += platform.request("user_led", 0).eq(sys_counter[26])
 
-
-class EthernetSoC(BaseSoC):
-    csr_peripherals = [
-        "ethphy",
-        "ethmac",
-    ]
-    csr_map_update(BaseSoC.csr_map, csr_peripherals)
-
-    interrupt_map = {
-        "ethmac": 3,
-    }
-    interrupt_map.update(BaseSoC.interrupt_map)
-
-    mem_map = {
-        "ethmac": 0x30000000,  # (shadow @0xb0000000)
-    }
-    mem_map.update(BaseSoC.mem_map)
-
-    def __init__(self, *args, **kwargs):
-        BaseSoC.__init__(self, *args, **kwargs)
-
-        # ethernet mac
-        self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"),
-                                                self.platform.request("eth"))
-        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
-        self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
-        self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
-
-        self.crg.cd_eth.clk.attr.add("keep")
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            self.crg.cd_eth.clk)
-
-
-class EtherboneSoC(BaseSoC):
-    csr_peripherals = [
-        "ethphy",
-        "ethcore",
-    ]
-    csr_map_update(BaseSoC.csr_map, csr_peripherals)
-
-    def __init__(self, platform, mac_address=0x10e2d5000000, ip_address="192.168.1.50"):
-        BaseSoC.__init__(self, platform, cpu_type=None, csr_data_width=32, l2_size=64)
-
-
-        # ethernet mac/udp/ip stack
-        ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"),
-                                self.platform.request("eth"))
-        ethphy = ClockDomainsRenamer("eth")(ethphy)
-        ethcore = LiteEthUDPIPCore(ethphy,
-                                   mac_address=0x10e2d5000000,
-                                   ip_address=convert_ip("192.168.1.50"),
-                                   clk_freq=int(50e6))
-        ethcore = ClockDomainsRenamer("eth")(ethcore)
-        self.submodules += ethphy, ethcore
-
-        # etherbone bridge
-        etherbone_cd = ClockDomain("etherbone") # FIXME: similar to sys but need for
-        self.clock_domains += etherbone_cd      # correct clock domain renaiming
-        self.comb += [
-            etherbone_cd.clk.eq(ClockSignal("sys")),
-            etherbone_cd.rst.eq(ResetSignal("sys"))
-        ]
-        self.add_cpu_or_bridge(LiteEthEtherbone(ethcore.udp, 1234, cd="etherbone"))
-        self.add_wb_master(self.cpu_or_bridge.wishbone.bus)
-
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            self.crg.cd_eth.clk)
-
-
-class SDCardSoC(SoCCore):
-    csr_peripherals = [
-        "sdclk",
-        "sdphy",
-        "sdcore",
-        "sdtimer",
-        "sdemulator",
-        "bist_generator",
-        "bist_checker",
-        "analyzer",
-    ]
-    csr_map_update(SoCCore.csr_map, csr_peripherals)
-
-    def __init__(self, platform, with_bist=False):
-        clk_freq = int(100e6)
-        sd_freq = int(100e6)
-        SoCCore.__init__(self, platform, clk_freq,
-            cpu_type=None,
-            csr_data_width=32,
-            with_uart=None,
-            with_timer=None,
-            ident="NeTV2 SDCard LiteX Test SoC", ident_version=True)
-
-        self.submodules.crg = CRG(platform)
-
-        # bridge
-        self.add_cpu_or_bridge(uart.UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
-
-        # sd
-        self.submodules.sdclk = SDClockerS7()
-        self.submodules.sdphy = SDPHY(platform.request("sdcard"), platform.device)
-        self.submodules.sdcore = SDCore(self.sdphy)
-        self.submodules.sdtimer = timer.Timer()
-
-        self.submodules.bist_generator = BISTBlockGenerator(random=True)
-        self.submodules.bist_checker = BISTBlockChecker(random=True)
-        self.comb += [
-            self.sdcore.source.connect(self.bist_checker.sink),
-            self.bist_generator.source.connect(self.sdcore.sink)
-        ]
-
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            self.sdclk.cd_sd.clk)
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            self.sdclk.cd_sd_fb.clk)
-
-        # led blinking (sys)
-        sys_counter = Signal(32)
-        self.sync.sys += sys_counter.eq(sys_counter + 1)
-        self.comb += platform.request("user_led", 0).eq(sys_counter[26])
-
-        # led blinking (sd)
-        sd_counter = Signal(32)
-        self.sync.sd += sd_counter.eq(sd_counter + 1)
-        self.comb += platform.request("user_led", 1).eq(sd_counter[26])
-
-
-class PCIeSoC(BaseSoC):
-    csr_peripherals = [
-        "pcie_phy",
-        "pcie_dma0",
-        "pcie_dma1",
-        "pcie_msi",
-    ]
-    csr_map_update(BaseSoC.csr_map, csr_peripherals)
-
-    BaseSoC.mem_map["csr"] = 0x00000000
-    BaseSoC.mem_map["rom"] = 0x20000000
-
-    def __init__(self, platform, **kwargs):
-        BaseSoC.__init__(self, platform, csr_data_width=32, **kwargs)
-
-        # pcie phy
-        self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x2"))
-        platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            self.pcie_phy.cd_pcie.clk)
-
-        # pcie endpoint
-        self.submodules.pcie_endpoint = LitePCIeEndpoint(self.pcie_phy, with_reordering=True)
-
-        # pcie wishbone bridge
-        self.submodules.pcie_bridge = LitePCIeWishboneBridge(self.pcie_endpoint, lambda a: 1, shadow_base=0x80000000)
-        self.add_wb_master(self.pcie_bridge.wishbone)
-
-        # pcie dma
-        self.submodules.pcie_dma0 = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
-
-        # pcie msi
-        self.submodules.pcie_msi = LitePCIeMSI()
-        self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
-        self.interrupts = {
-            "PCIE_DMA0_WRITER":    self.pcie_dma0.writer.irq,
-            "PCIE_DMA0_READER":    self.pcie_dma0.reader.irq
-        }
-        for i, (k, v) in enumerate(sorted(self.interrupts.items())):
-            self.comb += self.pcie_msi.irqs[i].eq(v)
-            self.add_constant(k + "_INTERRUPT", i)
 
         # led blinking (pcie)
-        pcie_counter = Signal(32)
-        self.sync.pcie += pcie_counter.eq(pcie_counter + 1)
-        self.comb += platform.request("user_led", 1).eq(pcie_counter[26])
+        if with_pcie:
+            pcie_counter = Signal(32)
+            self.sync.pcie += pcie_counter.eq(pcie_counter + 1)
+            self.comb += platform.request("user_led", 1).eq(pcie_counter[26])
+
 
     def generate_software_header(self):
         csr_header = get_csr_header(self.get_csr_regions(),
@@ -547,27 +447,14 @@ class PCIeSoC(BaseSoC):
 
 def main():
     platform = Platform()
-    if len(sys.argv) < 2:
-        print("missing target:(base or ethernet or etherbone or sdcard or pcie)")
-        exit()
-    if sys.argv[1] == "base":
-        soc = BaseSoC(platform)
-    if sys.argv[1] == "ethernet":
-        soc = EthernetSoC(platform)
-    elif sys.argv[1] == "etherbone":
-        soc = EtherboneSoC(platform)
-    elif sys.argv[1] == "sdcard":
-        soc = SDCardSoC(platform)
-    elif sys.argv[1] == "pcie":
-        soc = PCIeSoC(platform)
+    if "no-compile" in sys.argv[1:]:
+        compile_gateware = False
     else:
-    	ValueError
-    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv")
+        compile_gateware = True
+    soc = NeTV2SoC(platform)
+    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv", compile_gateware=compile_gateware)
     vns = builder.build()
-    soc.do_exit(vns)
-
-    if sys.argv[1] == "pcie":
-        soc.generate_software_header()
+    soc.generate_software_header()
 
 if __name__ == "__main__":
     main()
