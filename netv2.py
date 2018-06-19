@@ -465,7 +465,7 @@ def main():
     else:
         compile_gateware = True
     builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv", compile_gateware=compile_gateware)
-    vns = builder.build()
+    vns = builder.build(build_name="pcie_sdi")
     soc.generate_software_header()
 
 if __name__ == "__main__":
