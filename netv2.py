@@ -15,6 +15,7 @@ from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
 from litex.soc.integration.cpu_interface import get_csr_header
 from litex.soc.cores import dna, xadc, timer, uart
+from litex.soc.cores.frequency_meter import FrequencyMeter
 
 from litedram.modules import MT41J128M16
 from litedram.phy import a7ddrphy
@@ -35,6 +36,9 @@ from litepcie.phy.s7pciephy import S7PCIEPHY
 from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
 from litepcie.frontend.dma import LitePCIeDMA
 from litepcie.frontend.wishbone import LitePCIeWishboneBridge
+
+from litevideo.input import HDMIIn
+from litevideo.output import VideoOut
 
 from gateware.icap import ICAP
 from gateware.flash import Flash
@@ -326,7 +330,12 @@ class NeTV2SoC(SoCSDRAM):
         "pcie_phy",
         "pcie_dma0",
         "pcie_dma1",
-        "pcie_msi"
+        "pcie_msi",
+
+        "hdmi_out0",
+        "hdmi_in0",
+        "hdmi_in0_freq",
+        "hdmi_in0_edid_mem",
     ]
     csr_map_update(SoCSDRAM.csr_map, csr_peripherals)
 
@@ -346,7 +355,8 @@ class NeTV2SoC(SoCSDRAM):
     def __init__(self, platform,
         with_sdram=True,
         with_ethernet=True,
-        with_pcie=True):
+        with_pcie=True,
+        with_hdmi_in0=True, with_hdmi_out0=True):
         clk_freq = int(100e6)
         SoCSDRAM.__init__(self, platform, clk_freq,
             cpu_type="lm32",
@@ -427,6 +437,33 @@ class NeTV2SoC(SoCSDRAM):
                 self.comb += self.pcie_msi.irqs[i].eq(v)
                 self.add_constant(k + "_INTERRUPT", i)
 
+                pix_freq = 148.50e6
+
+        # hdmi in 0
+        if with_hdmi_in0:
+            hdmi_in0_pads = platform.request("hdmi_in")
+            self.submodules.hdmi_in0_freq = FrequencyMeter(period=self.clk_freq)
+            self.submodules.hdmi_in0 = HDMIIn(hdmi_in0_pads,
+                                             self.sdram.crossbar.get_port(mode="write"),
+                                             fifo_depth=512,
+                                             device="xc7")
+            self.comb += self.hdmi_in0_freq.clk.eq(self.hdmi_in0.clocking.cd_pix.clk),
+            for clk in [self.hdmi_in0.clocking.cd_pix.clk,
+                        self.hdmi_in0.clocking.cd_pix1p25x.clk,
+                        self.hdmi_in0.clocking.cd_pix5x.clk]:
+                self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
+
+        # hdmi out 0
+        if with_hdmi_out0:
+            hdmi_out0_dram_port = self.sdram.crossbar.get_port(mode="read", dw=16, cd="hdmi_out0_pix", reverse=True)
+            self.submodules.hdmi_out0 = VideoOut(platform.device,
+                                                 platform.request("hdmi_out"),
+                                                 hdmi_out0_dram_port,
+                                                 "ycbcr422",
+                                                 fifo_depth=4096)
+            for clk in [self.hdmi_out0.driver.clocking.cd_pix.clk,
+                        self.hdmi_out0.driver.clocking.cd_pix5x.clk]:
+                self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
 
         # led blinking (sys)
         sys_counter = Signal(32)
@@ -465,7 +502,7 @@ def main():
     else:
         compile_gateware = True
     builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv", compile_gateware=compile_gateware)
-    vns = builder.build(build_name="pcie_sdi")
+    vns = builder.build(build_name="netv2")
     soc.generate_software_header()
 
 if __name__ == "__main__":
