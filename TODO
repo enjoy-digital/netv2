@@ -1,5 +1,3 @@
 - integrate Bunnie's changes.
 - test HDMI.
-- test SDCard.
 - test HDMI <--> PCIe.
-- test PCIe Gen2 X4 (requires LitePCIe changes).
