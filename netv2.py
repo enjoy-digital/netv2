@@ -6,10 +6,12 @@ import math
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.misc import timeline
 
 from litex.build.generic_platform import *
 from litex.build.xilinx import XilinxPlatform
 
+from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
@@ -241,8 +243,10 @@ def period_ns(freq):
     return 1e9/freq
 
 
-class CRG(Module):
+class CRG(Module, AutoCSR):
     def __init__(self, platform):
+        self.reset = CSR()
+
         self.clock_domains.cd_sys = ClockDomain()
         self.clock_domains.cd_sys4x = ClockDomain(reset_less=True)
         self.clock_domains.cd_sys4x_dqs = ClockDomain(reset_less=True)
@@ -252,6 +256,9 @@ class CRG(Module):
 
         clk50 = platform.request("clk50")
         platform.add_period_constraint(clk50, period_ns(50e6))
+
+        soft_reset = Signal()
+        self.sync += timeline(self.reset.re, [(1024, [soft_reset.eq(1)])])
 
         pll_locked = Signal()
         pll_fb = Signal()
@@ -296,10 +303,10 @@ class CRG(Module):
             Instance("BUFG", i_I=pll_sys4x, o_O=self.cd_sys4x.clk),
             Instance("BUFG", i_I=pll_sys4x_dqs, o_O=self.cd_sys4x_dqs.clk),
             Instance("BUFG", i_I=pll_eth, o_O=self.cd_eth.clk),
-            AsyncResetSynchronizer(self.cd_sys, ~pll_locked),
-            AsyncResetSynchronizer(self.cd_clk100, ~pll_locked),
-            AsyncResetSynchronizer(self.cd_eth, ~pll_locked),
-            AsyncResetSynchronizer(self.cd_clk200, ~pll_locked)
+            AsyncResetSynchronizer(self.cd_sys, ~pll_locked | soft_reset),
+            AsyncResetSynchronizer(self.cd_clk100, ~pll_locked | soft_reset),
+            AsyncResetSynchronizer(self.cd_eth, ~pll_locked | soft_reset),
+            AsyncResetSynchronizer(self.cd_clk200, ~pll_locked | soft_reset)
         ]
 
         reset_counter = Signal(4, reset=15)
@@ -315,6 +322,7 @@ class CRG(Module):
 
 class NeTV2SoC(SoCSDRAM):
     csr_peripherals = [
+        "crg",
         "dna",
         "xadc",
         "flash",

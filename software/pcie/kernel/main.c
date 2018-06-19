@@ -840,6 +840,10 @@ static int netv2_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
         goto fail5;
     }
 
+    /* soft reset */
+    netv2_writel(netv2_dev, CSR_CRG_RESET_ADDR, 1);
+    udelay(10000);
+
     /* create all chardev in /dev */
     ret = netv2_alloc_chdev(netv2_dev);
     if(ret){
