@@ -347,8 +347,8 @@ class NeTV2SoC(SoCSDRAM):
     }
     mem_map.update(SoCSDRAM.mem_map)
 
-    SoCSDRAM.mem_map["csr"] = 0x00000000
-    SoCSDRAM.mem_map["rom"] = 0x20000000
+    mem_map["csr"] = 0x00000000
+    mem_map["rom"] = 0x20000000
 
     def __init__(self, platform,
         with_sdram=True,
