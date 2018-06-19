@@ -351,6 +351,7 @@ class NeTV2SoC(SoCSDRAM):
         SoCSDRAM.__init__(self, platform, clk_freq,
             cpu_type="lm32",
             csr_data_width=32, csr_address_width=15,
+            l2_size=64,
             integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
             integrated_main_ram_size=0x8000 if not with_sdram else 0,
