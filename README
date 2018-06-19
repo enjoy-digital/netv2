@@ -11,59 +11,23 @@
 ------------------
 1. Install Python3 and your vendor's software
 
-2. Obtain LiteX and install it:
-  git clone https://github.com/enjoy-digital/litex --recursive
-  cd litex
-  python3 setup.py develop
-  cd ..
+2. Obtain LiteX & Cores ecosystem:
+  python3 litex_setup.py init
+  python3 litex_setup.py install
 
-3. Obtain LiteDRAM and install it:
-  git clone https://github.com/enjoy-digital/litedram
-  cd litedram
-  python3 setup.py develop
-  cd ..
-
-4. Obtain LitePCIe and install it:
-  git clone https://github.com/enjoy-digital/litepcie
-  cd litepcie
-  python3 setup.py develop
-  cd ..
-
-5. Obtain LiteVideo and install it:
-  git clone https://github.com/enjoy-digital/litevideo
-  cd litedram
-  python3 setup.py develop
-  cd ..
-
-6. Build the gateware and software:
-  python3 netv2xxyy.py (base, pcie, etherbone, ...)
+3. Build the design and load it:
+  python3 netv2.py
   python3 load.py
 
 [> Status
 ---------
 
 NeTV2:
-UART:     OK
-PCIe:     OK (X1)
-DDR3:     OK
-HDMI_OUT: OK (with DVI up to 1080p60)
-HDMI_IN:  OK (with DVI up to 1080p60)
-
-NeTV2-MVP:
-UART:       OK
-PCIe:       OK (X2)
-DDR3:       OK
-HDMI_OUT_0: OK
-HDMI_IN_0:  OK (with DVI up to 1080p60)
-HDMI_OUT_1: OK
-HDMI_IN_1:  OK (with DVI up to 1080p60)
-
-NeTV2-MVP-DVT1:
 UART:       OK
 ETHERNET:   OK
 SDCARD:     OK
 PCIe:       OK
-DDR3:       UNTESTED
+DDR3:       OK
 HDMI_OUT_0: UNTESTED
 HDMI_IN_0:  UNTESTED
 HDMI_OUT_1: UNTESTED
