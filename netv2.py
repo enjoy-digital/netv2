@@ -449,13 +449,21 @@ class NeTV2SoC(SoCSDRAM):
         tools.write_to_file(os.path.join("software", "pcie", "kernel", "csr.h"), csr_header)
 
 
+class NeTV2MVPSoC(NeTV2SoC):
+    def __init__(self, platform):
+        NeTV2SoC.__init__(self, platform, with_ethernet=False)
+
+
 def main():
     platform = Platform()
+    if "mvp" in sys.argv[1:]:
+        soc = NeTV2MVPSoC(platform)
+    else:
+        soc = NeTV2SoC(platform)
     if "no-compile" in sys.argv[1:]:
         compile_gateware = False
     else:
         compile_gateware = True
-    soc = NeTV2SoC(platform)
     builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv", compile_gateware=compile_gateware)
     vns = builder.build()
     soc.generate_software_header()
