@@ -83,17 +83,15 @@ _io = [
         Subsignal("ras_n", Pins("Y9"), IOStandard("SSTL15")),
         Subsignal("cas_n", Pins("Y7"), IOStandard("SSTL15")),
         Subsignal("we_n", Pins("V8"), IOStandard("SSTL15")),
-        Subsignal("dm", Pins("G1 H4 M5 L3"), IOStandard("SSTL15")),
+        Subsignal("dm", Pins("M5 L3"), IOStandard("SSTL15")),
         Subsignal("dq", Pins(
-            "C2 F1 B1 F3 A1 D2 B2 E2 "
-            "J5 H3 K1 H2 J1 G2 H5 G3 "
             "N2 M6 P1 N5 P2 N4 R1 P6 "
             "K3 M2 K4 M3 J6 L5 J4 K6 "
             ),
             IOStandard("SSTL15"),
             Misc("IN_TERM=UNTUNED_SPLIT_50")),
-        Subsignal("dqs_p", Pins("E1 K2 P5 M1"), IOStandard("DIFF_SSTL15")),
-        Subsignal("dqs_n", Pins("D1 J2 P4 L1"), IOStandard("DIFF_SSTL15")),
+        Subsignal("dqs_p", Pins("P5 M1"), IOStandard("DIFF_SSTL15")),
+        Subsignal("dqs_n", Pins("P4 L1"), IOStandard("DIFF_SSTL15")),
         Subsignal("clk_p", Pins("R3"), IOStandard("DIFF_SSTL15")),
         Subsignal("clk_n", Pins("R2"), IOStandard("DIFF_SSTL15")),
         Subsignal("cke", Pins("Y8"), IOStandard("SSTL15")),
@@ -356,12 +354,13 @@ class NeTV2SoC(SoCSDRAM):
         with_sdram=True,
         with_ethernet=True,
         with_pcie=True,
-        with_hdmi_in0=True, with_hdmi_out0=True):
+        with_hdmi_in0=True, with_hdmi_out0=True,
+        with_hdmi_in1=False, with_hdmi_out1=False):
         clk_freq = int(100e6)
         SoCSDRAM.__init__(self, platform, clk_freq,
             cpu_type="lm32",
             csr_data_width=32, csr_address_width=15,
-            l2_size=64,
+            l2_size=32,
             integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
             integrated_main_ram_size=0x8000 if not with_sdram else 0,
@@ -437,8 +436,6 @@ class NeTV2SoC(SoCSDRAM):
                 self.comb += self.pcie_msi.irqs[i].eq(v)
                 self.add_constant(k + "_INTERRUPT", i)
 
-                pix_freq = 148.50e6
-
         # hdmi in 0
         if with_hdmi_in0:
             hdmi_in0_pads = platform.request("hdmi_in", 0)
@@ -467,6 +464,36 @@ class NeTV2SoC(SoCSDRAM):
                 fifo_depth=4096)
             for clk in [self.hdmi_out0.driver.clocking.cd_pix.clk,
                         self.hdmi_out0.driver.clocking.cd_pix5x.clk]:
+                self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
+
+        # hdmi in 1
+        if with_hdmi_in1:
+            hdmi_in1_pads = platform.request("hdmi_in", 1)
+            self.submodules.hdmi_in1_freq = FrequencyMeter(period=self.clk_freq)
+            self.submodules.hdmi_in1 = HDMIIn(
+                hdmi_in1_pads,
+                self.sdram.crossbar.get_port(mode="write"),
+                fifo_depth=512,
+                device="xc7",
+                split_mmcm=True)
+            self.comb += self.hdmi_in1_freq.clk.eq(self.hdmi_in1.clocking.cd_pix.clk),
+            for clk in [self.hdmi_in1.clocking.cd_pix.clk,
+                        self.hdmi_in1.clocking.cd_pix1p25x.clk,
+                        self.hdmi_in1.clocking.cd_pix5x.clk]:
+                self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
+            self.platform.add_period_constraint(platform.lookup_request("hdmi_in", 1).clk_p, period_ns(148.5e6))
+
+        # hdmi out 1
+        if with_hdmi_out1:
+            hdmi_out1_dram_port = self.sdram.crossbar.get_port(mode="read", dw=16, cd="hdmi_out1_pix", reverse=True)
+            self.submodules.hdmi_out1 = VideoOut(
+                platform.device,
+                platform.request("hdmi_out", 1),
+                hdmi_out1_dram_port,
+                "ycbcr422",
+                fifo_depth=4096)
+            for clk in [self.hdmi_out1.driver.clocking.cd_pix.clk,
+                        self.hdmi_out1.driver.clocking.cd_pix5x.clk]:
                 self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
 
         # led blinking (sys)
