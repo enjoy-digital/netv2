@@ -16,8 +16,8 @@
   python3 litex_setup.py install
 
 3. Build the design and load it:
-  python3 netv2.py
-  python3 load.py
+  python3 make.py build
+  python3 make.py load or flash
 
 [> Status
 ---------
