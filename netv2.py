@@ -39,6 +39,8 @@ from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
 from litepcie.frontend.dma import LitePCIeDMA
 from litepcie.frontend.wishbone import LitePCIeWishboneBridge
 
+from liteiclink.transceiver.gtp_7series import GTPQuadPLL, GTP
+
 from litevideo.input import HDMIIn
 from litevideo.output import VideoOut
 
@@ -132,6 +134,16 @@ _io = [
         Subsignal("rx_n", Pins("C11 A10 C9 A8")),
         Subsignal("tx_p", Pins("D5 B6 D7 B4")),
         Subsignal("tx_n", Pins("C5 A6 C7 A4"))
+    ),
+
+    # interboard communication
+    ("interboard_comm_tx", 0,
+        Subsignal("p", Pins("D5")),
+        Subsignal("n", Pins("C5"))
+    ),
+    ("interboard_comm_rx", 0,
+        Subsignal("p", Pins("D11")),
+        Subsignal("n", Pins("C11"))
     ),
 
     # ethernet
@@ -363,9 +375,11 @@ class NeTV2SoC(SoCSDRAM):
         with_ethernet=True,
         with_pcie=True,
         with_hdmi_in0=True, with_hdmi_out0=True,
-        with_hdmi_in1=False, with_hdmi_out1=False):
-        clk_freq = int(100e6)
-        SoCSDRAM.__init__(self, platform, clk_freq,
+        with_hdmi_in1=False, with_hdmi_out1=False,
+        with_interboard_communication=True):
+        assert not (with_pcie and with_interboard_communication)
+        sys_clk_freq = int(100e6)
+        SoCSDRAM.__init__(self, platform, sys_clk_freq,
             cpu_type="lm32",
             csr_data_width=32, csr_address_width=15,
             l2_size=32,
@@ -388,12 +402,12 @@ class NeTV2SoC(SoCSDRAM):
         self.submodules.icap = ICAP(platform)
 
         # flash
-        self.submodules.flash = Flash(platform.request("flash"), div=math.ceil(clk_freq/25e6))
+        self.submodules.flash = Flash(platform.request("flash"), div=math.ceil(sys_clk_freq/25e6))
 
         # sdram
         if with_sdram:
             self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram"))
-            sdram_module = MT41J128M16(self.clk_freq, "1:4")
+            sdram_module = MT41J128M16(sys_clk_freq, "1:4")
             self.add_constant("READ_LEVELING_BITSLIP", 3)
             self.add_constant("READ_LEVELING_DELAY", 14)
             self.register_sdram(self.ddrphy,
@@ -444,10 +458,72 @@ class NeTV2SoC(SoCSDRAM):
                 self.comb += self.pcie_msi.irqs[i].eq(v)
                 self.add_constant(k + "_INTERRUPT", i)
 
+        # interboard communication
+        if with_interboard_communication:
+            # refclk
+            refclk125 = Signal()
+            refclk125_bufg = Signal()
+            pll_fb = Signal()
+            self.specials += [
+                Instance("PLLE2_BASE",
+                    p_STARTUP_WAIT="FALSE", #o_LOCKED=,
+
+                    # VCO @ 1GHz
+                    p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=20.0,
+                    p_CLKFBOUT_MULT=24, p_DIVCLK_DIVIDE=1,
+                    i_CLKIN1=platform.lookup_request("clk50"), i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
+
+                    # 125MHz
+                    p_CLKOUT0_DIVIDE=8, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=refclk125
+                ),
+                Instance("BUFG", i_I=refclk125, o_O=refclk125_bufg)
+            ]
+            platform.add_platform_command("set_property SEVERITY {{Warning}} [get_drc_checks REQP-49]")
+
+            # qpll
+            qpll = GTPQuadPLL(refclk125_bufg, 125e6, 1.25e9)
+            print(qpll)
+            self.submodules += qpll
+
+            # gtp
+            gtp = GTP(qpll,
+                platform.request("interboard_comm_tx"),
+                platform.request("interboard_comm_rx"),
+                sys_clk_freq,
+                clock_aligner=True, internal_loopback=False)
+            self.submodules += gtp
+
+            counter = Signal(32)
+            self.sync.tx += counter.eq(counter + 1)
+
+            # send counter to other-board
+            self.comb += [
+                gtp.encoder.k[0].eq(1),
+                gtp.encoder.d[0].eq((5 << 5) | 28),
+                gtp.encoder.k[1].eq(0),
+                gtp.encoder.d[1].eq(counter[26:])
+            ]
+
+            # receive counter and display it on leds
+            self.comb += [
+                platform.request("user_led", 3).eq(gtp.rx_ready),
+                platform.request("user_led", 4).eq(gtp.decoders[1].d[0]),
+                platform.request("user_led", 5).eq(gtp.decoders[1].d[1])
+            ]
+
+            gtp.cd_tx.clk.attr.add("keep")
+            gtp.cd_rx.clk.attr.add("keep")
+            platform.add_period_constraint(gtp.cd_tx.clk, 1e9/gtp.tx_clk_freq)
+            platform.add_period_constraint(gtp.cd_rx.clk, 1e9/gtp.tx_clk_freq)
+            self.platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                gtp.cd_tx.clk,
+                gtp.cd_rx.clk)
+
         # hdmi in 0
         if with_hdmi_in0:
             hdmi_in0_pads = platform.request("hdmi_in", 0)
-            self.submodules.hdmi_in0_freq = FrequencyMeter(period=self.clk_freq)
+            self.submodules.hdmi_in0_freq = FrequencyMeter(period=sys_clk_freq)
             self.submodules.hdmi_in0 = HDMIIn(
                 hdmi_in0_pads,
                 self.sdram.crossbar.get_port(mode="write"),
@@ -477,7 +553,7 @@ class NeTV2SoC(SoCSDRAM):
         # hdmi in 1
         if with_hdmi_in1:
             hdmi_in1_pads = platform.request("hdmi_in", 1)
-            self.submodules.hdmi_in1_freq = FrequencyMeter(period=self.clk_freq)
+            self.submodules.hdmi_in1_freq = FrequencyMeter(period=sys_clk_freq)
             self.submodules.hdmi_in1 = HDMIIn(
                 hdmi_in1_pads,
                 self.sdram.crossbar.get_port(mode="write"),
