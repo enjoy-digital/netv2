@@ -408,8 +408,6 @@ class NeTV2SoC(SoCSDRAM):
         if with_sdram:
             self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram"))
             sdram_module = MT41J128M16(sys_clk_freq, "1:4")
-            self.add_constant("READ_LEVELING_BITSLIP", 3)
-            self.add_constant("READ_LEVELING_DELAY", 14)
             self.register_sdram(self.ddrphy,
                                 sdram_module.geom_settings,
                                 sdram_module.timing_settings,
