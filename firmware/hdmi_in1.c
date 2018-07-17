@@ -181,8 +181,10 @@ void hdmi_in1_print_status(void)
 	hdmi_in1_data0_wer_update_write(1);
 	hdmi_in1_data1_wer_update_write(1);
 	hdmi_in1_data2_wer_update_write(1);
-	printf("hdmi_in1: ph:%4d %4d %4d // charsync:%d%d%d [%d %d %d] // WER:%3d %3d %3d // chansync:%d // res:%dx%d\r\n",
-		hdmi_in1_d0, hdmi_in1_d1, hdmi_in1_d2,
+	printf("hdmi_in1: ph:%4d(%2d/%2d) %4d(%2d/%2d) %4d(%2d/%2d) // charsync:%d%d%d [%d %d %d] // WER:%3d %3d %3d // chansync:%d // res:%dx%d\r\n",
+	       hdmi_in1_d0, hdmi_in1_data0_cap_cntvalueout_m_read(), hdmi_in1_data0_cap_cntvalueout_s_read(),
+	       hdmi_in1_d1, hdmi_in1_data1_cap_cntvalueout_m_read(), hdmi_in1_data1_cap_cntvalueout_s_read(),
+	       hdmi_in1_d2, hdmi_in1_data2_cap_cntvalueout_m_read(), hdmi_in1_data2_cap_cntvalueout_s_read(),
 		hdmi_in1_data0_charsync_char_synced_read(),
 		hdmi_in1_data1_charsync_char_synced_read(),
 		hdmi_in1_data2_charsync_char_synced_read(),
@@ -212,7 +214,7 @@ int hdmi_in1_calibrate_delays(int freq)
 	/* preload slave phase detector idelay with 90° phase shift
 	  (78 ps taps on 7-series) */
 	phase_detector_delay = 10000000/(4*freq*78);
-	for(i=0; i<phase_detector_delay; i++) {
+	for(i=0; i<phase_detector_delay + 1; i++) {
 		hdmi_in1_data0_cap_dly_ctl_write(DVISAMPLER_DELAY_SLAVE_INC);
 		hdmi_in1_data1_cap_dly_ctl_write(DVISAMPLER_DELAY_SLAVE_INC);
 		hdmi_in1_data2_cap_dly_ctl_write(DVISAMPLER_DELAY_SLAVE_INC);

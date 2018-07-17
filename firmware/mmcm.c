@@ -362,6 +362,7 @@ void mmcm_config_for_clock(int freq)
 	hdmi_in0_clocking_mmcm_reset_write(0);
 #endif
 
+#if 0 // it's correct in the base design
 #ifdef CSR_HDMI_IN1_BASE
 	hdmi_in1_clocking_mmcm_reset_write(1);
 	if(freq < 3000)
@@ -375,6 +376,7 @@ void mmcm_config_for_clock(int freq)
 	else
 		printf("Frequency too high for input MMCMs\r\n");
 	hdmi_in1_clocking_mmcm_reset_write(0);
+#endif
 #endif
 }
 
