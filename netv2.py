@@ -380,9 +380,8 @@ class NeTV2SoC(SoCSDRAM):
         assert not (with_pcie and with_interboard_communication)
         sys_clk_freq = int(100e6)
         SoCSDRAM.__init__(self, platform, sys_clk_freq,
-            cpu_type="lm32",
-            csr_data_width=32, csr_address_width=15,
-            l2_size=32,
+            cpu_type="vexriscv", l2_size=32,
+            csr_data_width=8, csr_address_width=15,
             integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
             integrated_main_ram_size=0x8000 if not with_sdram else 0,
@@ -406,7 +405,8 @@ class NeTV2SoC(SoCSDRAM):
 
         # sdram
         if with_sdram:
-            self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram"))
+            self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram"),
+                sys_clk_freq=sys_clk_freq, iodelay_clk_freq=200e6)
             sdram_module = MT41J128M16(sys_clk_freq, "1:4")
             self.register_sdram(self.ddrphy,
                                 sdram_module.geom_settings,
