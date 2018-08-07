@@ -215,7 +215,7 @@ static char *get_token(char **str)
 
 static void reboot(void)
 {
-	REBOOT;
+	ctrl_reset_write(1);
 }
 
 static void status_enable(void)
