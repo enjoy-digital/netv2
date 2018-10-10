@@ -16,6 +16,7 @@ from litex.soc.integration.soc_core import *
 from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
 from litex.soc.integration.cpu_interface import get_csr_header
+from litex.soc.cores.clock import *
 from litex.soc.cores import dna, xadc, timer, uart
 from litex.soc.cores.frequency_meter import FrequencyMeter
 
@@ -256,7 +257,7 @@ def period_ns(freq):
 
 
 class CRG(Module, AutoCSR):
-    def __init__(self, platform):
+    def __init__(self, platform, sys_clk_freq):
         self.reset = CSR()
 
         self.clock_domains.cd_sys = ClockDomain()
@@ -272,64 +273,16 @@ class CRG(Module, AutoCSR):
         soft_reset = Signal()
         self.sync += timeline(self.reset.re, [(1024, [soft_reset.eq(1)])])
 
-        pll_locked = Signal()
-        pll_fb = Signal()
-        pll_sys = Signal()
-        pll_sys4x = Signal()
-        pll_sys4x_dqs = Signal()
-        pll_eth = Signal()
-        pll_clk200 = Signal()
-        self.specials += [
-            Instance("PLLE2_BASE",
-                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
+        self.submodules.pll = pll = S7PLL()
+        pll.register_clkin(clk50, 50e6)
+        pll.create_clkout(self.cd_sys, sys_clk_freq)
+        pll.create_clkout(self.cd_sys4x, 4*sys_clk_freq)
+        pll.create_clkout(self.cd_sys4x_dqs, 4*sys_clk_freq, phase=90)
+        pll.create_clkout(self.cd_clk200, 200e6)
+        pll.create_clkout(self.cd_clk100, 100e6)
+        pll.create_clkout(self.cd_eth, 50e6)
 
-                     # VCO @ 1600 MHz
-                     p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=20.0,
-                     p_CLKFBOUT_MULT=32, p_DIVCLK_DIVIDE=1,
-                     i_CLKIN1=clk50, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
-
-                     # 100 MHz
-                     p_CLKOUT0_DIVIDE=16, p_CLKOUT0_PHASE=0.0,
-                     o_CLKOUT0=pll_sys,
-
-                     # 400 MHz
-                     p_CLKOUT1_DIVIDE=4, p_CLKOUT1_PHASE=0.0,
-                     o_CLKOUT1=pll_sys4x,
-
-                     # 400 MHz dqs
-                     p_CLKOUT2_DIVIDE=4, p_CLKOUT2_PHASE=90.0,
-                     o_CLKOUT2=pll_sys4x_dqs,
-
-                     # 50 MHz
-                     p_CLKOUT3_DIVIDE=32, p_CLKOUT3_PHASE=0.0,
-                     o_CLKOUT3=pll_eth,
-
-                     # 200 MHz
-                     p_CLKOUT4_DIVIDE=8, p_CLKOUT4_PHASE=0.0,
-                     o_CLKOUT4=pll_clk200
-
-            ),
-            Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
-            Instance("BUFG", i_I=pll_sys, o_O=self.cd_clk100.clk),
-            Instance("BUFG", i_I=pll_clk200, o_O=self.cd_clk200.clk),
-            Instance("BUFG", i_I=pll_sys4x, o_O=self.cd_sys4x.clk),
-            Instance("BUFG", i_I=pll_sys4x_dqs, o_O=self.cd_sys4x_dqs.clk),
-            Instance("BUFG", i_I=pll_eth, o_O=self.cd_eth.clk),
-            AsyncResetSynchronizer(self.cd_sys, ~pll_locked | soft_reset),
-            AsyncResetSynchronizer(self.cd_clk100, ~pll_locked | soft_reset),
-            AsyncResetSynchronizer(self.cd_eth, ~pll_locked | soft_reset),
-            AsyncResetSynchronizer(self.cd_clk200, ~pll_locked | soft_reset)
-        ]
-
-        reset_counter = Signal(4, reset=15)
-        ic_reset = Signal(reset=1)
-        self.sync.clk200 += \
-            If(reset_counter != 0,
-                reset_counter.eq(reset_counter - 1)
-            ).Else(
-                ic_reset.eq(0)
-            )
-        self.specials += Instance("IDELAYCTRL", i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
+        self.submodules.idelayctrl = S7IDELAYCTRL(self.cd_clk200)
 
 
 class NeTV2SoC(SoCSDRAM):
@@ -385,11 +338,11 @@ class NeTV2SoC(SoCSDRAM):
             integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
             integrated_main_ram_size=0x8000 if not with_sdram else 0,
-            ident="NeTV2 LiteX Test SoC", ident_version="True",
+            ident="NeTV2 LiteX Test SoC", ident_version=True,
             reserve_nmi_interrupt=False)
 
         # crg
-        self.submodules.crg = CRG(platform)
+        self.submodules.crg = CRG(platform, sys_clk_freq)
 
         # dnax
         self.submodules.dna = dna.DNA()
