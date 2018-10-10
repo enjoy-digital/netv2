@@ -411,28 +411,15 @@ class NeTV2SoC(SoCSDRAM):
 
         # interboard communication
         if with_interboard_communication:
-            # refclk
-            refclk125 = Signal()
-            refclk125_bufg = Signal()
-            pll_fb = Signal()
-            self.specials += [
-                Instance("PLLE2_BASE",
-                    p_STARTUP_WAIT="FALSE", #o_LOCKED=,
+            self.clock_domains.cd_refclk = ClockDomain()
+            self.submodules.refclk_pll = refclk_pll = S7PLL()
+            refclk_pll.register_clkin(platform.lookup_request("clk50"), 50e6)
+            refclk_pll.create_clkout(self.cd_refclk, 125e6)
 
-                    # VCO @ 1GHz
-                    p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=20.0,
-                    p_CLKFBOUT_MULT=24, p_DIVCLK_DIVIDE=1,
-                    i_CLKIN1=platform.lookup_request("clk50"), i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
-
-                    # 125MHz
-                    p_CLKOUT0_DIVIDE=8, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=refclk125
-                ),
-                Instance("BUFG", i_I=refclk125, o_O=refclk125_bufg)
-            ]
             platform.add_platform_command("set_property SEVERITY {{Warning}} [get_drc_checks REQP-49]")
 
             # qpll
-            qpll = GTPQuadPLL(refclk125_bufg, 125e6, 1.25e9)
+            qpll = GTPQuadPLL(ClockSignal("refclk"), 125e6, 1.25e9)
             print(qpll)
             self.submodules += qpll
 
