@@ -335,6 +335,7 @@ class NeTV2SoC(SoCSDRAM):
     def __init__(self, platform,
         with_sdram=True,
         with_ethernet=False,
+        with_etherbone=True,
 		with_sdcard=True,
         with_pcie=False,
         with_hdmi_in0=False, with_hdmi_out0=False,
@@ -385,6 +386,18 @@ class NeTV2SoC(SoCSDRAM):
             self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
             self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
             self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
+
+            self.crg.cd_eth.clk.attr.add("keep")
+            self.platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                self.crg.cd_eth.clk)
+
+        # etherbone
+        if with_etherbone:
+            self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"), self.platform.request("eth"))
+            self.submodules.ethcore = LiteEthUDPIPCore(self.ethphy, 0x10e2d5000000, convert_ip("192.168.1.50"), sys_clk_freq)
+            self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234, mode="master")
+            self.add_wb_master(self.etherbone.wishbone.bus)
 
             self.crg.cd_eth.clk.attr.add("keep")
             self.platform.add_false_path_constraints(
