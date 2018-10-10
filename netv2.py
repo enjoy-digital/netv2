@@ -19,6 +19,7 @@ from litex.soc.integration.cpu_interface import get_csr_header
 from litex.soc.cores.clock import *
 from litex.soc.cores import dna, xadc, timer, uart
 from litex.soc.cores.frequency_meter import FrequencyMeter
+from litex.soc.cores.timer import Timer
 
 from litedram.modules import MT41J128M16
 from litedram.phy import a7ddrphy
@@ -298,6 +299,14 @@ class NeTV2SoC(SoCSDRAM):
         "ethphy",
         "ethmac",
 
+        "sdclk",
+        "sdphy",
+        "sdcore",
+        "sdtimer",
+        "sdemulator",
+        "bist_generator",
+        "bist_checker",
+
         "pcie_phy",
         "pcie_dma0",
         "pcie_dma1",
@@ -320,21 +329,23 @@ class NeTV2SoC(SoCSDRAM):
     }
     mem_map.update(SoCSDRAM.mem_map)
 
-    mem_map["csr"] = 0x00000000
-    mem_map["rom"] = 0x20000000
+    #mem_map["csr"] = 0x00000000
+    #mem_map["rom"] = 0x20000000
 
     def __init__(self, platform,
         with_sdram=True,
-        with_ethernet=True,
-        with_pcie=True,
-        with_hdmi_in0=True, with_hdmi_out0=True,
+        with_ethernet=False,
+		with_sdcard=True,
+        with_pcie=False,
+        with_hdmi_in0=False, with_hdmi_out0=False,
         with_hdmi_in1=False, with_hdmi_out1=False,
         with_interboard_communication=False):
         assert not (with_pcie and with_interboard_communication)
         sys_clk_freq = int(100e6)
+        sd_freq = int(100e6)
         SoCSDRAM.__init__(self, platform, sys_clk_freq,
             cpu_type="vexriscv", l2_size=32,
-            csr_data_width=8, csr_address_width=15,
+            csr_data_width=8, csr_address_width=14,
             integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
             integrated_main_ram_size=0x8000 if not with_sdram else 0,
@@ -379,6 +390,32 @@ class NeTV2SoC(SoCSDRAM):
             self.platform.add_false_path_constraints(
                 self.crg.cd_sys.clk,
                 self.crg.cd_eth.clk)
+
+        # sdcard
+        self.submodules.sdclk = SDClockerS7()
+        self.submodules.sdphy = SDPHY(platform.request("sdcard"), platform.device)
+        self.submodules.sdcore = SDCore(self.sdphy)
+        self.submodules.sdtimer = Timer()
+
+        self.submodules.bist_generator = BISTBlockGenerator(random=True)
+        self.submodules.bist_checker = BISTBlockChecker(random=True)
+
+        self.comb += [
+            self.sdcore.source.connect(self.bist_checker.sink),
+            self.bist_generator.source.connect(self.sdcore.sink)
+        ]
+
+        self.platform.add_period_constraint(self.crg.cd_sys.clk, 1e9/sys_clk_freq)
+        self.platform.add_period_constraint(self.sdclk.cd_sd.clk, 1e9/sd_freq)
+        self.platform.add_period_constraint(self.sdclk.cd_sd_fb.clk, 1e9/sd_freq)
+
+        self.crg.cd_sys.clk.attr.add("keep")
+        self.sdclk.cd_sd.clk.attr.add("keep")
+        self.sdclk.cd_sd_fb.clk.attr.add("keep")
+        self.platform.add_false_path_constraints(
+            self.crg.cd_sys.clk,
+            self.sdclk.cd_sd.clk,
+            self.sdclk.cd_sd_fb.clk)
 
         # pcie
         if with_pcie:
@@ -530,6 +567,11 @@ class NeTV2SoC(SoCSDRAM):
             self.sync.pcie += pcie_counter.eq(pcie_counter + 1)
             self.comb += platform.request("user_led", 1).eq(pcie_counter[26])
 
+        # led blinking (sdcard)
+        if with_sdcard:
+            sd_counter = Signal(32)
+            self.sync.sd += sd_counter.eq(sd_counter + 1)
+            self.comb += platform.request("user_led", 1).eq(sd_counter[26])
 
     def generate_software_header(self):
         csr_header = get_csr_header(self.get_csr_regions(),

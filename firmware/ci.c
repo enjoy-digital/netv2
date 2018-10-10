@@ -22,6 +22,7 @@
 #include "hdmi_out0.h"
 #include "bist.h"
 #include "dump.h"
+#include "sdcard.h"
 
 int status_enabled;
 
@@ -99,6 +100,14 @@ static void help_sdram_test(void)
 }
 #endif
 
+static void help_sdcard(void)
+{
+	wputs("sdclk <freq>                   - SDCard set clk frequency (Mhz)");
+	wputs("sdinit                         - SDCard initialization");
+	wputs("sdtest <loops>                 - SDCard test");
+
+}
+
 static void help_debug(void)
 {
 	wputs("debug mmcm                     - dump mmcm configuration");
@@ -150,6 +159,7 @@ static void ci_help(void)
 	help_sdram_test();
 	wputs("");
 #endif
+	help_sdcard();
 	wputs("");
 	help_debug();
 }
@@ -732,7 +742,16 @@ void ci_service(void)
 		}
 	}
 #endif
-
+	else if(strcmp(token, "sdclk") == 0) {
+		token = get_token(&str);
+		sdclk_set_clk(atoi(token));
+	}
+	else if(strcmp(token, "sdinit") == 0)
+		sdcard_init();
+	else if(strcmp(token, "sdtest") == 0) {
+		token = get_token(&str);
+		sdcard_test(atoi(token));
+	}
 	else if(strcmp(token, "status") == 0) {
 		token = get_token(&str);
 		if(strcmp(token, "on") == 0)
