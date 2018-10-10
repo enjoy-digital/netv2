@@ -10,6 +10,7 @@ OBJECTS=isr.o \
 		config.o \
 		ethernet.o \
 		etherbone.o \
+		sdcard.o \
 		processor.o \
 		hdmi_in0.o \
 		hdmi_in1.o \
@@ -41,7 +42,7 @@ firmware.elf: $(OBJECTS) libs
 	$(LD) $(LDFLAGS) \
 		-T linker.ld \
 		-N -o $@ \
-		 $(NETV2_DIR)/software/libbase/crt0-$(CPU).o \
+		 $(NETV2_DIR)/software/libbase/crt0-$(CPU)-ctr.o \
 		$(OBJECTS) \
 		-L$(NETV2_DIR)/software/libbase \
 		-L$(NETV2_DIR)/software/libcompiler_rt \
