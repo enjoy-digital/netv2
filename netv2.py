@@ -336,7 +336,7 @@ class NeTV2SoC(SoCSDRAM):
         with_sdram=True,
         with_ethernet=False,
         with_etherbone=True,
-		with_sdcard=True,
+        with_sdcard=True,
         with_pcie=False,
         with_hdmi_in0=False, with_hdmi_out0=False,
         with_hdmi_in1=False, with_hdmi_out1=False,
@@ -345,8 +345,10 @@ class NeTV2SoC(SoCSDRAM):
         sys_clk_freq = int(100e6)
         sd_freq = int(100e6)
         SoCSDRAM.__init__(self, platform, sys_clk_freq,
-            cpu_type="vexriscv", l2_size=32,
-            csr_data_width=8, csr_address_width=14,
+            #cpu_type="vexriscv", l2_size=32,
+            cpu_type=None, l2_size=32,
+            #csr_data_width=8, csr_address_width=14,
+            csr_data_width=32, csr_address_width=14,
             integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
             integrated_main_ram_size=0x8000 if not with_sdram else 0,
@@ -396,8 +398,10 @@ class NeTV2SoC(SoCSDRAM):
         if with_etherbone:
             self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"), self.platform.request("eth"))
             self.submodules.ethcore = LiteEthUDPIPCore(self.ethphy, 0x10e2d5000000, convert_ip("192.168.1.50"), sys_clk_freq)
-            self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234, mode="master")
-            self.add_wb_master(self.etherbone.wishbone.bus)
+            self.add_cpu(LiteEthEtherbone(self.ethcore.udp, 1234, mode="master"))
+            self.add_wb_master(self.cpu.wishbone.bus)
+            #self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234, mode="master")
+            #self.add_wb_master(self.etherbone.wishbone.bus)
 
             self.crg.cd_eth.clk.attr.add("keep")
             self.platform.add_false_path_constraints(
