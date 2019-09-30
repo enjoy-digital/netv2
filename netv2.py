@@ -15,10 +15,10 @@ from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
-from litex.soc.integration.cpu_interface import get_csr_header
+from litex.soc.integration.export import get_csr_header
 from litex.soc.cores.clock import *
 from litex.soc.cores import dna, xadc, timer, uart
-from litex.soc.cores.frequency_meter import FrequencyMeter
+from litex.soc.cores.freqmeter import FreqMeter
 from litex.soc.cores.timer import Timer
 
 from litedram.modules import MT41J128M16
@@ -515,7 +515,7 @@ class NeTV2SoC(SoCSDRAM):
         # hdmi in 0
         if with_hdmi_in0:
             hdmi_in0_pads = platform.request("hdmi_in", 0)
-            self.submodules.hdmi_in0_freq = FrequencyMeter(period=sys_clk_freq)
+            self.submodules.hdmi_in0_freq = FreqMeter(period=sys_clk_freq)
             self.submodules.hdmi_in0 = HDMIIn(
                 hdmi_in0_pads,
                 self.sdram.crossbar.get_port(mode="write"),
@@ -545,7 +545,7 @@ class NeTV2SoC(SoCSDRAM):
         # hdmi in 1
         if with_hdmi_in1:
             hdmi_in1_pads = platform.request("hdmi_in", 1)
-            self.submodules.hdmi_in1_freq = FrequencyMeter(period=sys_clk_freq)
+            self.submodules.hdmi_in1_freq = FreqMeter(period=sys_clk_freq)
             self.submodules.hdmi_in1 = HDMIIn(
                 hdmi_in1_pads,
                 self.sdram.crossbar.get_port(mode="write"),
@@ -591,8 +591,8 @@ class NeTV2SoC(SoCSDRAM):
             self.comb += platform.request("user_led", 1).eq(sd_counter[26])
 
     def generate_software_header(self):
-        csr_header = get_csr_header(self.get_csr_regions(),
-                                    self.get_constants(),
+        csr_header = get_csr_header(self.csr_regions,
+                                    self.constants,
                                     with_access_functions=False,
                                     with_shadow_base=False)
         tools.write_to_file(os.path.join("software", "pcie", "kernel", "csr.h"), csr_header)
