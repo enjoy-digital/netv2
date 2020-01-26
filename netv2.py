@@ -17,7 +17,9 @@ from litex.soc.integration.builder import *
 from litex.soc.integration.export import *
 
 from litex.soc.cores.clock import S7PLL, S7IDELAYCTRL
-from litex.soc.cores import dna, xadc
+from litex.soc.cores.dna import DNA
+from litex.soc.cores.xadc import XADC
+from litex.soc.cores.icap import ICAP
 from litex.soc.cores.freqmeter import FreqMeter
 from litex.soc.cores.spi_flash import S7SPIFlash
 
@@ -36,9 +38,6 @@ from litepcie.frontend.wishbone import LitePCIeWishboneBridge
 
 from litevideo.input import HDMIIn
 from litevideo.output import VideoOut
-
-from gateware.icap import ICAP
-from gateware.flash import Flash
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -92,15 +91,17 @@ class NeTV2(SoCSDRAM):
         self.add_csr("crg")
 
         # DNA --------------------------------------------------------------------------------------
-        self.submodules.dna = dna.DNA()
+        self.submodules.dna = DNA()
+        self.dna.add_timing_constraints(platform, sys_clk_freq, self.crg.cd_sys.clk)
         self.add_csr("dna")
 
         # XADC -------------------------------------------------------------------------------------
-        self.submodules.xadc = xadc.XADC()
+        self.submodules.xadc = XADC()
         self.add_csr("xadc")
 
         # ICAP -------------------------------------------------------------------------------------
         self.submodules.icap = ICAP(platform)
+        self.icap.add_timing_constraints(platform, sys_clk_freq, self.crg.cd_sys.clk)
         self.add_csr("icap")
 
         # Flash ------------------------------------------------------------------------------------
