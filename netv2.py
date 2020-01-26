@@ -41,8 +41,6 @@ from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
 from litepcie.frontend.dma import LitePCIeDMA
 from litepcie.frontend.wishbone import LitePCIeWishboneBridge
 
-from liteiclink.transceiver.gtp_7series import GTPQuadPLL, GTP
-
 from litevideo.input import HDMIIn
 from litevideo.output import VideoOut
 
@@ -136,16 +134,6 @@ _io = [
         Subsignal("rx_n", Pins("C11 A10 C9 A8")),
         Subsignal("tx_p", Pins("D5 B6 D7 B4")),
         Subsignal("tx_n", Pins("C5 A6 C7 A4"))
-    ),
-
-    # interboard communication
-    ("interboard_comm_tx", 0,
-        Subsignal("p", Pins("D5")),
-        Subsignal("n", Pins("C5"))
-    ),
-    ("interboard_comm_rx", 0,
-        Subsignal("p", Pins("D11")),
-        Subsignal("n", Pins("C11"))
     ),
 
     # ethernet
@@ -339,8 +327,7 @@ class NeTV2SoC(SoCSDRAM):
         with_sdcard=True,
         with_pcie=False,
         with_hdmi_in0=False, with_hdmi_out0=False,
-        with_hdmi_in1=False, with_hdmi_out1=False,
-        with_interboard_communication=False):
+        with_hdmi_in1=False, with_hdmi_out1=False):
         assert not (with_pcie and with_interboard_communication)
         sys_clk_freq = int(100e6)
         sd_freq = int(100e6)
@@ -462,55 +449,6 @@ class NeTV2SoC(SoCSDRAM):
             for i, (k, v) in enumerate(sorted(self.interrupts.items())):
                 self.comb += self.pcie_msi.irqs[i].eq(v)
                 self.add_constant(k + "_INTERRUPT", i)
-
-        # interboard communication
-        if with_interboard_communication:
-            self.clock_domains.cd_refclk = ClockDomain()
-            self.submodules.refclk_pll = refclk_pll = S7PLL()
-            refclk_pll.register_clkin(platform.lookup_request("clk50"), 50e6)
-            refclk_pll.create_clkout(self.cd_refclk, 125e6)
-
-            platform.add_platform_command("set_property SEVERITY {{Warning}} [get_drc_checks REQP-49]")
-
-            # qpll
-            qpll = GTPQuadPLL(ClockSignal("refclk"), 125e6, 1.25e9)
-            print(qpll)
-            self.submodules += qpll
-
-            # gtp
-            gtp = GTP(qpll,
-                platform.request("interboard_comm_tx"),
-                platform.request("interboard_comm_rx"),
-                sys_clk_freq,
-                clock_aligner=True, internal_loopback=False)
-            self.submodules += gtp
-
-            counter = Signal(32)
-            self.sync.tx += counter.eq(counter + 1)
-
-            # send counter to other-board
-            self.comb += [
-                gtp.encoder.k[0].eq(1),
-                gtp.encoder.d[0].eq((5 << 5) | 28),
-                gtp.encoder.k[1].eq(0),
-                gtp.encoder.d[1].eq(counter[26:])
-            ]
-
-            # receive counter and display it on leds
-            self.comb += [
-                platform.request("user_led", 3).eq(gtp.rx_ready),
-                platform.request("user_led", 4).eq(gtp.decoders[1].d[0]),
-                platform.request("user_led", 5).eq(gtp.decoders[1].d[1])
-            ]
-
-            gtp.cd_tx.clk.attr.add("keep")
-            gtp.cd_rx.clk.attr.add("keep")
-            platform.add_period_constraint(gtp.cd_tx.clk, 1e9/gtp.tx_clk_freq)
-            platform.add_period_constraint(gtp.cd_rx.clk, 1e9/gtp.tx_clk_freq)
-            self.platform.add_false_path_constraints(
-                self.crg.cd_sys.clk,
-                gtp.cd_tx.clk,
-                gtp.cd_rx.clk)
 
         # hdmi in 0
         if with_hdmi_in0:
