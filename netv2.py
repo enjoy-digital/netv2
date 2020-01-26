@@ -3,6 +3,7 @@
 import sys
 import os
 import math
+import argparse
 
 from migen import *
 
@@ -215,16 +216,30 @@ class NeTV2(SoCSDRAM):
 
 # Build --------------------------------------------------------------------------------------------
 
+
 def main():
+    parser = argparse.ArgumentParser(description="NeTV2 LiteX SoC")
+    parser.add_argument("--build", action="store_true", help="Build bitstream")
+    parser.add_argument("--load",  action="store_true", help="Load bitstream")
+    parser.add_argument("--flash", action="store_true", help="Flash bitstream")
+    args = parser.parse_args()
+
     platform = netv2.Platform()
-    soc = NeTV2(platform)
-    if "no-compile" in sys.argv[1:]:
-        compile_gateware = False
-    else:
-        compile_gateware = True
-    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv", compile_gateware=compile_gateware)
-    vns = builder.build(build_name="netv2")
+    soc      = NeTV2(platform)
+    builder  = Builder(soc, output_dir="build", csr_csv="test/csr.csv")
+    builder.build(run=args.build)
     soc.generate_software_headers()
+
+    if args.load:
+        from litex.build.openocd import OpenOCD
+        prog = OpenOCD("openocd/openocd.cfg")
+        prog.load_bitstream("build/gateware/top.bit")
+
+    if args.flash:
+        from litex.build.openocd import OpenOCD
+        prog = OpenOCD("openocd/openocd.cfg", flash_proxy_basename="openocd/bscan_spi_xc7a35t.bit")
+        prog.set_flash_proxy_dir(".")
+        prog.flash(0, "build/gateware/top.bin")
 
 if __name__ == "__main__":
     main()
