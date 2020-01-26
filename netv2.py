@@ -14,7 +14,7 @@ from litex.boards.platforms import netv2
 from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
-from litex.soc.integration.export import get_csr_header
+from litex.soc.integration.export import *
 
 from litex.soc.cores.clock import S7PLL, S7IDELAYCTRL
 from litex.soc.cores import dna, xadc
@@ -145,7 +145,10 @@ class NeTV2(SoCSDRAM):
         # PCIe -------------------------------------------------------------------------------------
         if with_pcie:
             # PHY ----------------------------------------------------------------------------------
-            self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x1"))
+            self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x4"),
+                data_width = 128,
+                bar0_size  = 0x20000)
+            platform.add_false_path_constraint(self.crg.cd_sys.clk, self.pcie_phy.cd_pcie.clk)
             self.add_csr("pcie_phy")
 
             # Endpoint -----------------------------------------------------------------------------
