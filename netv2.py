@@ -216,9 +216,10 @@ class NeTV2(SoCSDRAM):
 
 # Build --------------------------------------------------------------------------------------------
 
-
 def main():
-    parser = argparse.ArgumentParser(description="NeTV2 LiteX SoC")
+    with open("README") as f:
+        description = [str(f.readline()) for i in range(7)]
+    parser = argparse.ArgumentParser(description="".join(description[0:]), formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--build", action="store_true", help="Build bitstream")
     parser.add_argument("--load",  action="store_true", help="Load bitstream")
     parser.add_argument("--flash", action="store_true", help="Flash bitstream")
