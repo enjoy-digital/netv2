@@ -125,8 +125,7 @@ class NeTV2SoC(SoCSDRAM):
         with_ethernet=False,
         with_etherbone=True,
         with_pcie=False,
-        with_hdmi_in0=False, with_hdmi_out0=False,
-        with_hdmi_in1=False, with_hdmi_out1=False):
+        with_hdmi_in0=True, with_hdmi_out0=True):
         assert not (with_pcie and with_interboard_communication)
         sys_clk_freq = int(100e6)
         sd_freq = int(100e6)
@@ -184,8 +183,8 @@ class NeTV2SoC(SoCSDRAM):
         if with_etherbone:
             self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"), self.platform.request("eth"))
             self.submodules.ethcore = LiteEthUDPIPCore(self.ethphy, 0x10e2d5000000, convert_ip("192.168.1.50"), sys_clk_freq)
-            self.add_cpu(LiteEthEtherbone(self.ethcore.udp, 1234, mode="master"))
-            self.add_wb_master(self.cpu.wishbone.bus)
+            self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234, mode="master")
+            self.add_wb_master(self.etherbone.wishbone.bus)
             #self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234, mode="master")
             #self.add_wb_master(self.etherbone.wishbone.bus)
 
@@ -295,17 +294,10 @@ class NeTV2SoC(SoCSDRAM):
             self.sync.pcie += pcie_counter.eq(pcie_counter + 1)
             self.comb += platform.request("user_led", 1).eq(pcie_counter[26])
 
-        # led blinking (sdcard)
-        if with_sdcard:
-            sd_counter = Signal(32)
-            self.sync.sd += sd_counter.eq(sd_counter + 1)
-            self.comb += platform.request("user_led", 1).eq(sd_counter[26])
-
     def generate_software_header(self):
         csr_header = get_csr_header(self.csr_regions,
                                     self.constants,
-                                    with_access_functions=False,
-                                    with_shadow_base=False)
+                                    with_access_functions=False)
         tools.write_to_file(os.path.join("software", "pcie", "kernel", "csr.h"), csr_header)
 
 
