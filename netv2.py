@@ -44,10 +44,6 @@ from litevideo.output import VideoOut
 from gateware.icap import ICAP
 from gateware.flash import Flash
 
-def csr_map_update(csr_map, csr_peripherals):
-    csr_map.update(dict((n, v)
-        for v, n in enumerate(csr_peripherals, start=max(csr_map.values()) + 1)))
-
 class CRG(Module, AutoCSR):
     def __init__(self, platform, sys_clk_freq):
         self.reset = CSR()
@@ -78,30 +74,6 @@ class CRG(Module, AutoCSR):
 
 
 class NeTV2SoC(SoCSDRAM):
-    csr_peripherals = [
-        "crg",
-        "dna",
-        "xadc",
-        "flash",
-        "icap",
-
-        "ddrphy",
-
-        "ethphy",
-        "ethmac",
-
-        "pcie_phy",
-        "pcie_dma0",
-        "pcie_dma1",
-        "pcie_msi",
-
-        "hdmi_out0",
-        "hdmi_in0",
-        "hdmi_in0_freq",
-        "hdmi_in0_edid_mem",
-    ]
-    csr_map_update(SoCSDRAM.csr_map, csr_peripherals)
-
     interrupt_map = {
         "ethmac": 3,
     }
@@ -117,7 +89,6 @@ class NeTV2SoC(SoCSDRAM):
 
     def __init__(self, platform,
         with_sdram=True,
-        with_ethernet=False,
         with_etherbone=True,
         with_pcie=False,
         with_hdmi_in0=True, with_hdmi_out0=True):
@@ -137,23 +108,29 @@ class NeTV2SoC(SoCSDRAM):
 
         # crg
         self.submodules.crg = CRG(platform, sys_clk_freq)
+        self.add_csr("crg")
 
         # dnax
         self.submodules.dna = dna.DNA()
+        self.add_csr("dna")
 
         # xadc
         self.submodules.xadc = xadc.XADC()
+        self.add_csr("xadc")
 
         # icap
         self.submodules.icap = ICAP(platform)
+        self.add_csr("icap")
 
         # flash
         self.submodules.flash = Flash(platform.request("flash"), div=math.ceil(sys_clk_freq/25e6))
+        self.add_csr("flash")
 
         # sdram
         if with_sdram:
             self.submodules.ddrphy = a7ddrphy.A7DDRPHY(platform.request("ddram"),
                 sys_clk_freq=sys_clk_freq, iodelay_clk_freq=200e6)
+            self.add_csr("ddrphy")
             sdram_module = MT41J128M16(sys_clk_freq, "1:4")
             self.register_sdram(self.ddrphy,
                                 sdram_module.geom_settings,
@@ -161,22 +138,10 @@ class NeTV2SoC(SoCSDRAM):
                                 controller_settings=ControllerSettings(with_bandwidth=True,
                                                                        cmd_buffer_depth=8,
                                                                        with_refresh=True))
-        # ethernet
-        if with_ethernet:
-            self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"),
-                                                    self.platform.request("eth"))
-            self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
-            self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
-            self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
-
-            self.crg.cd_eth.clk.attr.add("keep")
-            self.platform.add_false_path_constraints(
-                self.crg.cd_sys.clk,
-                self.crg.cd_eth.clk)
-
         # etherbone
         if with_etherbone:
             self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"), self.platform.request("eth"))
+            self.add_csr("ethphy")
             self.submodules.ethcore = LiteEthUDPIPCore(self.ethphy, 0x10e2d5000000, convert_ip("192.168.1.50"), sys_clk_freq)
             self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234, mode="master")
             self.add_wb_master(self.etherbone.wishbone.bus)
@@ -192,6 +157,7 @@ class NeTV2SoC(SoCSDRAM):
         if with_pcie:
             # pcie phy
             self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x2"))
+            self.add_csr("pcie_phy")
             platform.add_false_path_constraints(
                 self.crg.cd_sys.clk,
                 self.pcie_phy.cd_pcie.clk)
@@ -205,9 +171,11 @@ class NeTV2SoC(SoCSDRAM):
 
             # pcie dma
             self.submodules.pcie_dma0 = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
+            self.add_csr("pcie_dma0")
 
             # pcie msi
             self.submodules.pcie_msi = LitePCIeMSI()
+            self.add_csr("pcie_msi")
             self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
             self.interrupts = {
                 "PCIE_DMA0_WRITER":    self.pcie_dma0.writer.irq,
@@ -221,12 +189,15 @@ class NeTV2SoC(SoCSDRAM):
         if with_hdmi_in0:
             hdmi_in0_pads = platform.request("hdmi_in", 0)
             self.submodules.hdmi_in0_freq = FreqMeter(period=sys_clk_freq)
+            self.add_csr("hdmi_in0_freq")
             self.submodules.hdmi_in0 = HDMIIn(
                 hdmi_in0_pads,
                 self.sdram.crossbar.get_port(mode="write"),
                 fifo_depth=512,
                 device="xc7",
                 split_mmcm=True)
+            self.add_csr("hdmi_in0")
+            self.add_csr("hdmi_in0_edid_mem")
             self.comb += self.hdmi_in0_freq.clk.eq(self.hdmi_in0.clocking.cd_pix.clk),
             for clk in [self.hdmi_in0.clocking.cd_pix.clk,
                         self.hdmi_in0.clocking.cd_pix1p25x.clk,
@@ -243,38 +214,9 @@ class NeTV2SoC(SoCSDRAM):
                 hdmi_out0_dram_port,
                 "ycbcr422",
                 fifo_depth=4096)
+            self.add_csr("hdmi_out0")
             for clk in [self.hdmi_out0.driver.clocking.cd_pix.clk,
                         self.hdmi_out0.driver.clocking.cd_pix5x.clk]:
-                self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
-
-        # hdmi in 1
-        if with_hdmi_in1:
-            hdmi_in1_pads = platform.request("hdmi_in", 1)
-            self.submodules.hdmi_in1_freq = FreqMeter(period=sys_clk_freq)
-            self.submodules.hdmi_in1 = HDMIIn(
-                hdmi_in1_pads,
-                self.sdram.crossbar.get_port(mode="write"),
-                fifo_depth=512,
-                device="xc7",
-                split_mmcm=True)
-            self.comb += self.hdmi_in1_freq.clk.eq(self.hdmi_in1.clocking.cd_pix.clk),
-            for clk in [self.hdmi_in1.clocking.cd_pix.clk,
-                        self.hdmi_in1.clocking.cd_pix1p25x.clk,
-                        self.hdmi_in1.clocking.cd_pix5x.clk]:
-                self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
-            self.platform.add_period_constraint(platform.lookup_request("hdmi_in", 1).clk_p, 1e9/148.5e6)
-
-        # hdmi out 1
-        if with_hdmi_out1:
-            hdmi_out1_dram_port = self.sdram.crossbar.get_port(mode="read", dw=16, cd="hdmi_out1_pix", reverse=True)
-            self.submodules.hdmi_out1 = VideoOut(
-                platform.device,
-                platform.request("hdmi_out", 1),
-                hdmi_out1_dram_port,
-                "ycbcr422",
-                fifo_depth=4096)
-            for clk in [self.hdmi_out1.driver.clocking.cd_pix.clk,
-                        self.hdmi_out1.driver.clocking.cd_pix5x.clk]:
                 self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
 
         # led blinking (sys)
