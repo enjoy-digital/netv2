@@ -5,29 +5,23 @@ import os
 import math
 
 from migen import *
-from migen.genlib.resetsync import AsyncResetSynchronizer
-from migen.genlib.misc import timeline
+
+from litex.build import tools
 
 from litex.boards.platforms import netv2
 
-from litex.build.generic_platform import *
-from litex.build.xilinx import XilinxPlatform
-
 from litex.soc.interconnect.csr import *
-from litex.soc.integration.soc_core import *
 from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
 from litex.soc.integration.export import get_csr_header
-from litex.soc.cores.clock import *
-from litex.soc.cores import dna, xadc, timer, uart
+
+from litex.soc.cores.clock import S7PLL, S7IDELAYCTRL
+from litex.soc.cores import dna, xadc
 from litex.soc.cores.freqmeter import FreqMeter
-from litex.soc.cores.timer import Timer
 
 from litedram.modules import MT41J128M16
 from litedram.phy import a7ddrphy
-from litedram.core import ControllerSettings
 
-from liteeth.common import convert_ip
 from liteeth.phy.rmii import LiteEthPHYRMII
 from liteeth.core.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
@@ -44,34 +38,36 @@ from litevideo.output import VideoOut
 from gateware.icap import ICAP
 from gateware.flash import Flash
 
-class CRG(Module, AutoCSR):
-    def __init__(self, platform, sys_clk_freq):
-        self.reset = CSR()
+# CRG ----------------------------------------------------------------------------------------------
 
-        self.clock_domains.cd_sys = ClockDomain()
-        self.clock_domains.cd_sys4x = ClockDomain(reset_less=True)
+class _CRG(Module, AutoCSR):
+    def __init__(self, platform, sys_clk_freq):
+        self.reset = CSR() # FIXME: not used for now
+
+        self.clock_domains.cd_sys       = ClockDomain()
+        self.clock_domains.cd_sys4x     = ClockDomain(reset_less=True)
         self.clock_domains.cd_sys4x_dqs = ClockDomain(reset_less=True)
-        self.clock_domains.cd_clk200 = ClockDomain()
-        self.clock_domains.cd_clk100 = ClockDomain()
-        self.clock_domains.cd_eth = ClockDomain()
+        self.clock_domains.cd_clk200    = ClockDomain()
+        self.clock_domains.cd_clk100    = ClockDomain()
+        self.clock_domains.cd_eth       = ClockDomain()
+
+        # # #
 
         clk50 = platform.request("clk50")
         platform.add_period_constraint(clk50, 1e9/50e6)
 
-        soft_reset = Signal()
-        self.sync += timeline(self.reset.re, [(1024, [soft_reset.eq(1)])])
-
-        self.submodules.pll = pll = S7PLL()
+        self.submodules.pll = pll = S7PLL(speedgrade=-1)
         pll.register_clkin(clk50, 50e6)
-        pll.create_clkout(self.cd_sys, sys_clk_freq)
-        pll.create_clkout(self.cd_sys4x, 4*sys_clk_freq)
+        pll.create_clkout(self.cd_sys,       sys_clk_freq)
+        pll.create_clkout(self.cd_sys4x,     4*sys_clk_freq)
         pll.create_clkout(self.cd_sys4x_dqs, 4*sys_clk_freq, phase=90)
-        pll.create_clkout(self.cd_clk200, 200e6)
-        pll.create_clkout(self.cd_clk100, 100e6)
-        pll.create_clkout(self.cd_eth, 50e6)
+        pll.create_clkout(self.cd_clk200,    200e6)
+        pll.create_clkout(self.cd_clk100,    100e6)
+        pll.create_clkout(self.cd_eth,       50e6)
 
         self.submodules.idelayctrl = S7IDELAYCTRL(self.cd_clk200)
 
+# NeTV2 --------------------------------------------------------------------------------------------
 
 class NeTV2(SoCSDRAM):
     interrupt_map = {
@@ -107,7 +103,7 @@ class NeTV2(SoCSDRAM):
             reserve_nmi_interrupt=False)
 
         # crg
-        self.submodules.crg = CRG(platform, sys_clk_freq)
+        self.submodules.crg = _CRG(platform, sys_clk_freq)
         self.add_csr("crg")
 
         # dnax
@@ -134,15 +130,12 @@ class NeTV2(SoCSDRAM):
             sdram_module = MT41J128M16(sys_clk_freq, "1:4")
             self.register_sdram(self.ddrphy,
                                 sdram_module.geom_settings,
-                                sdram_module.timing_settings,
-                                controller_settings=ControllerSettings(with_bandwidth=True,
-                                                                       cmd_buffer_depth=8,
-                                                                       with_refresh=True))
+                                sdram_module.timing_settings)
         # etherbone
         if with_etherbone:
             self.submodules.ethphy = LiteEthPHYRMII(self.platform.request("eth_clocks"), self.platform.request("eth"))
             self.add_csr("ethphy")
-            self.submodules.ethcore = LiteEthUDPIPCore(self.ethphy, 0x10e2d5000000, convert_ip("192.168.1.50"), sys_clk_freq)
+            self.submodules.ethcore = LiteEthUDPIPCore(self.ethphy, 0x10e2d5000000, "192.168.1.50", sys_clk_freq)
             self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234, mode="master")
             self.add_wb_master(self.etherbone.wishbone.bus)
             #self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234, mode="master")
@@ -236,6 +229,8 @@ class NeTV2(SoCSDRAM):
                                     self.constants,
                                     with_access_functions=False)
         tools.write_to_file(os.path.join("software", "pcie", "kernel", "csr.h"), csr_header)
+
+# Build --------------------------------------------------------------------------------------------
 
 def main():
     platform = netv2.Platform()
