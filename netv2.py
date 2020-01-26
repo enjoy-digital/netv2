@@ -82,9 +82,11 @@ class NeTV2(SoCSDRAM):
         # SoCSDRAM ---------------------------------------------------------------------------------
         SoCSDRAM.__init__(self, platform, sys_clk_freq,
             cpu_type            = "vexriscv",
+            cpu_variant         = "lite",
             csr_data_width      = 32,
             integrated_rom_size = 0x8000,
-            ident               = "NeTV2 LiteX SoC", ident_version=True)
+            ident               = "NeTV2 LiteX SoC",
+            ident_version       = True)
 
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = _CRG(platform, sys_clk_freq)
@@ -146,8 +148,8 @@ class NeTV2(SoCSDRAM):
         # PCIe -------------------------------------------------------------------------------------
         if with_pcie:
             # PHY ----------------------------------------------------------------------------------
-            self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x4"),
-                data_width = 128,
+            self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x1"),
+                data_width = 64,
                 bar0_size  = 0x20000)
             platform.add_false_path_constraint(self.crg.cd_sys.clk, self.pcie_phy.cd_pcie.clk)
             self.add_csr("pcie_phy")
@@ -160,7 +162,9 @@ class NeTV2(SoCSDRAM):
             self.add_wb_master(self.pcie_bridge.wishbone)
 
             # DMA ----------------------------------------------------------------------------------
-            self.submodules.pcie_dma = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint, with_loopback=True)
+            self.submodules.pcie_dma = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint,
+                with_buffering = True, buffering_depth=1024,
+                with_loopback  = True)
             self.add_csr("pcie_dma")
 
             # MSI ----------------------------------------------------------------------------------
