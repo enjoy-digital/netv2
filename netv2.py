@@ -73,7 +73,7 @@ class CRG(Module, AutoCSR):
         self.submodules.idelayctrl = S7IDELAYCTRL(self.cd_clk200)
 
 
-class NeTV2SoC(SoCSDRAM):
+class NeTV2(SoCSDRAM):
     interrupt_map = {
         "ethmac": 3,
     }
@@ -103,7 +103,7 @@ class NeTV2SoC(SoCSDRAM):
             integrated_rom_size=0x8000,
             integrated_sram_size=0x4000,
             integrated_main_ram_size=0x8000 if not with_sdram else 0,
-            ident="NeTV2 LiteX Test SoC", ident_version=True,
+            ident="NeTV2 LiteX SoC", ident_version=True,
             reserve_nmi_interrupt=False)
 
         # crg
@@ -237,18 +237,9 @@ class NeTV2SoC(SoCSDRAM):
                                     with_access_functions=False)
         tools.write_to_file(os.path.join("software", "pcie", "kernel", "csr.h"), csr_header)
 
-
-class NeTV2MVPSoC(NeTV2SoC):
-    def __init__(self, platform):
-        NeTV2SoC.__init__(self, platform, with_ethernet=False)
-
-
 def main():
     platform = netv2.Platform()
-    if "mvp" in sys.argv[1:]:
-        soc = NeTV2MVPSoC(platform)
-    else:
-        soc = NeTV2SoC(platform)
+    soc = NeTV2(platform)
     if "no-compile" in sys.argv[1:]:
         compile_gateware = False
     else:
