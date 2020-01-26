@@ -200,7 +200,11 @@ class NeTV2(SoCSDRAM):
             self.submodules.hdmi_out0 = VideoOut(
                 device     = platform.device,
                 pads       = platform.request("hdmi_out", 0),
-                dram_port  = self.sdram.crossbar.get_port(mode="read", dw=16, cd="hdmi_out0_pix", reverse=True),
+                dram_port  = self.sdram.crossbar.get_port(
+                    mode         = "read",
+                    data_width   = 16,
+                    clock_domain = "hdmi_out0_pix",
+                    reverse      = True),
                 mode       = "ycbcr422",
                 fifo_depth = 4096)
             self.add_csr("hdmi_out0")
