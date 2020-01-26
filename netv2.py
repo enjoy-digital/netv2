@@ -48,11 +48,6 @@ def csr_map_update(csr_map, csr_peripherals):
     csr_map.update(dict((n, v)
         for v, n in enumerate(csr_peripherals, start=max(csr_map.values()) + 1)))
 
-
-def period_ns(freq):
-    return 1e9/freq
-
-
 class CRG(Module, AutoCSR):
     def __init__(self, platform, sys_clk_freq):
         self.reset = CSR()
@@ -65,7 +60,7 @@ class CRG(Module, AutoCSR):
         self.clock_domains.cd_eth = ClockDomain()
 
         clk50 = platform.request("clk50")
-        platform.add_period_constraint(clk50, period_ns(50e6))
+        platform.add_period_constraint(clk50, 1e9/50e6)
 
         soft_reset = Signal()
         self.sync += timeline(self.reset.re, [(1024, [soft_reset.eq(1)])])
@@ -237,7 +232,7 @@ class NeTV2SoC(SoCSDRAM):
                         self.hdmi_in0.clocking.cd_pix1p25x.clk,
                         self.hdmi_in0.clocking.cd_pix5x.clk]:
                 self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
-            self.platform.add_period_constraint(platform.lookup_request("hdmi_in", 0).clk_p, period_ns(148.5e6))
+            self.platform.add_period_constraint(platform.lookup_request("hdmi_in", 0).clk_p, 1e9/148.5e6)
 
         # hdmi out 0
         if with_hdmi_out0:
@@ -267,7 +262,7 @@ class NeTV2SoC(SoCSDRAM):
                         self.hdmi_in1.clocking.cd_pix1p25x.clk,
                         self.hdmi_in1.clocking.cd_pix5x.clk]:
                 self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
-            self.platform.add_period_constraint(platform.lookup_request("hdmi_in", 1).clk_p, period_ns(148.5e6))
+            self.platform.add_period_constraint(platform.lookup_request("hdmi_in", 1).clk_p, 1e9/148.5e6)
 
         # hdmi out 1
         if with_hdmi_out1:
