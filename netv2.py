@@ -33,11 +33,6 @@ from liteeth.core.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
-from litesdcard.phy import SDPHY
-from litesdcard.clocker import SDClockerS7
-from litesdcard.core import SDCore
-from litesdcard.bist import BISTBlockGenerator, BISTBlockChecker
-
 from litepcie.phy.s7pciephy import S7PCIEPHY
 from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
 from litepcie.frontend.dma import LitePCIeDMA
@@ -100,14 +95,6 @@ class NeTV2SoC(SoCSDRAM):
         "ethphy",
         "ethmac",
 
-        "sdclk",
-        "sdphy",
-        "sdcore",
-        "sdtimer",
-        "sdemulator",
-        "bist_generator",
-        "bist_checker",
-
         "pcie_phy",
         "pcie_dma0",
         "pcie_dma1",
@@ -137,7 +124,6 @@ class NeTV2SoC(SoCSDRAM):
         with_sdram=True,
         with_ethernet=False,
         with_etherbone=True,
-        with_sdcard=True,
         with_pcie=False,
         with_hdmi_in0=False, with_hdmi_out0=False,
         with_hdmi_in1=False, with_hdmi_out1=False):
@@ -207,32 +193,6 @@ class NeTV2SoC(SoCSDRAM):
             self.platform.add_false_path_constraints(
                 self.crg.cd_sys.clk,
                 self.crg.cd_eth.clk)
-
-        # sdcard
-        self.submodules.sdclk = SDClockerS7()
-        self.submodules.sdphy = SDPHY(platform.request("sdcard"), platform.device)
-        self.submodules.sdcore = SDCore(self.sdphy)
-        self.submodules.sdtimer = Timer()
-
-        self.submodules.bist_generator = BISTBlockGenerator(random=True)
-        self.submodules.bist_checker = BISTBlockChecker(random=True)
-
-        self.comb += [
-            self.sdcore.source.connect(self.bist_checker.sink),
-            self.bist_generator.source.connect(self.sdcore.sink)
-        ]
-
-        self.platform.add_period_constraint(self.crg.cd_sys.clk, 1e9/sys_clk_freq)
-        self.platform.add_period_constraint(self.sdclk.cd_sd.clk, 1e9/sd_freq)
-        self.platform.add_period_constraint(self.sdclk.cd_sd_fb.clk, 1e9/sd_freq)
-
-        self.crg.cd_sys.clk.attr.add("keep")
-        self.sdclk.cd_sd.clk.attr.add("keep")
-        self.sdclk.cd_sd_fb.clk.attr.add("keep")
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            self.sdclk.cd_sd.clk,
-            self.sdclk.cd_sd_fb.clk)
 
         # pcie
         if with_pcie:
