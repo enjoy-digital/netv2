@@ -71,19 +71,6 @@ class _CRG(Module, AutoCSR):
 # NeTV2 --------------------------------------------------------------------------------------------
 
 class NeTV2(SoCSDRAM):
-    interrupt_map = {
-        "ethmac": 3,
-    }
-    interrupt_map.update(SoCSDRAM.interrupt_map)
-
-    mem_map = {
-        "ethmac": 0x30000000,
-    }
-    mem_map.update(SoCSDRAM.mem_map)
-
-    #mem_map["csr"] = 0x00000000
-    #mem_map["rom"] = 0x20000000
-
     def __init__(self, platform,
         with_sdram     = True,
         with_etherbone = True,
@@ -94,15 +81,10 @@ class NeTV2(SoCSDRAM):
 
         # SoCSDRAM ---------------------------------------------------------------------------------
         SoCSDRAM.__init__(self, platform, sys_clk_freq,
-            #cpu_type="vexriscv", l2_size=32,
-            cpu_type=None, l2_size=32,
-            #csr_data_width=8, csr_address_width=14,
-            csr_data_width=32, csr_address_width=14,
-            integrated_rom_size=0x8000,
-            integrated_sram_size=0x4000,
-            integrated_main_ram_size=0x8000 if not with_sdram else 0,
-            ident="NeTV2 LiteX SoC", ident_version=True,
-            reserve_nmi_interrupt=False)
+            cpu_type            = "vexriscv",
+            csr_data_width      = 32,
+            integrated_rom_size = 0x8000,
+            ident               = "NeTV2 LiteX SoC", ident_version=True)
 
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = _CRG(platform, sys_clk_freq)
@@ -194,33 +176,34 @@ class NeTV2(SoCSDRAM):
             self.submodules.hdmi_in0_freq = FreqMeter(period=sys_clk_freq)
             self.add_csr("hdmi_in0_freq")
             self.submodules.hdmi_in0 = HDMIIn(
-                hdmi_in0_pads,
-                self.sdram.crossbar.get_port(mode="write"),
-                fifo_depth=512,
-                device="xc7",
-                split_mmcm=True)
+                pads       = hdmi_in0_pads,
+                dram_port  = self.sdram.crossbar.get_port(mode="write"),
+                fifo_depth = 512,
+                device     = "xc7",
+                split_mmcm = True)
             self.add_csr("hdmi_in0")
             self.add_csr("hdmi_in0_edid_mem")
             self.comb += self.hdmi_in0_freq.clk.eq(self.hdmi_in0.clocking.cd_pix.clk),
-            for clk in [self.hdmi_in0.clocking.cd_pix.clk,
-                        self.hdmi_in0.clocking.cd_pix1p25x.clk,
-                        self.hdmi_in0.clocking.cd_pix5x.clk]:
-                self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
+            platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                self.hdmi_in0.clocking.cd_pix.clk,
+                self.hdmi_in0.clocking.cd_pix1p25x.clk,
+                self.hdmi_in0.clocking.cd_pix5x.clk)
             self.platform.add_period_constraint(platform.lookup_request("hdmi_in", 0).clk_p, 1e9/148.5e6)
 
         # HDMI Out 0 -------------------------------------------------------------------------------
         if with_hdmi_out0:
-            hdmi_out0_dram_port = self.sdram.crossbar.get_port(mode="read", dw=16, cd="hdmi_out0_pix", reverse=True)
             self.submodules.hdmi_out0 = VideoOut(
-                platform.device,
-                platform.request("hdmi_out", 0),
-                hdmi_out0_dram_port,
-                "ycbcr422",
-                fifo_depth=4096)
+                device     = platform.device,
+                pads       = platform.request("hdmi_out", 0),
+                dram_port  = self.sdram.crossbar.get_port(mode="read", dw=16, cd="hdmi_out0_pix", reverse=True),
+                mode       = "ycbcr422",
+                fifo_depth = 4096)
             self.add_csr("hdmi_out0")
-            for clk in [self.hdmi_out0.driver.clocking.cd_pix.clk,
-                        self.hdmi_out0.driver.clocking.cd_pix5x.clk]:
-                self.platform.add_false_path_constraints(self.crg.cd_sys.clk, clk)
+            platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                self.hdmi_out0.driver.clocking.cd_pix.clk,
+                self.hdmi_out0.driver.clocking.cd_pix5x.clk)
 
     def generate_software_headers(self):
         csr_header = get_csr_header(self.csr_regions, self.constants, with_access_functions=False)
