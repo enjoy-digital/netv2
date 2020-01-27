@@ -444,6 +444,27 @@ void scratch_test(void)
     close(fd);
 }
 
+void uart_test(void)
+{
+    int fd;
+
+    fd = open(litepcie_device, O_RDWR);
+    if (fd < 0) {
+        fprintf(stderr, "Could not init driver\n");
+        exit(1);
+    }
+
+    litepcie_writel(fd, CSR_CTRL_RESET_ADDR, 1); /* reset CPU */
+
+    while (1) {
+        if ((litepcie_readl(fd, CSR_UART_XOVER_RXEMPTY_ADDR) & 0x1) == 0) {
+            printf("%c", litepcie_readl(fd, CSR_UART_XOVER_RXTX_ADDR) & 0xff);
+        }
+    }
+
+    close(fd);
+}
+
 static void help(void)
 {
     printf("LitePCIe utilities\n"
@@ -458,6 +479,7 @@ static void help(void)
            "info                              Board information\n"
            "dma_test                          Test DMA  (loopback in FPGA)\n"
            "scratch_test                      Test Scratch register\n"
+           "uart_test                         Test CPU Crossover UART\n"
            "\n"
            "flash_update filename [offset]    Update FPGA gateware\n"
            "flash_dump filename size [offset] Dump FPGA gateware\n"
@@ -507,6 +529,8 @@ int main(int argc, char **argv)
         dma_test();
     else if (!strcmp(cmd, "scratch_test"))
         scratch_test();
+    else if (!strcmp(cmd, "uart_test"))
+        uart_test();
     else if (!strcmp(cmd, "flash_update")) {
         const char *filename;
         uint32_t offset = 0;
