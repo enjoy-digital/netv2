@@ -1035,7 +1035,7 @@ static int litepcie_pci_probe(struct pci_dev *dev, const struct pci_device_id *i
 
     /* check device version */
     pci_read_config_byte(dev, PCI_REVISION_ID, &rev_id);
-    if (rev_id != 1) {
+    if (rev_id != 0) {
         printk(KERN_ERR LITEPCIE_NAME " Unsupported device version %d\n", rev_id);
         goto fail2;
     }

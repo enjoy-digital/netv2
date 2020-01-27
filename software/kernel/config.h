@@ -4,11 +4,11 @@
 #include "soc.h"
 #include "mem.h"
 
-#define MINIMAL_GATEWARE_REVISION "2020-01-02"
+#define MINIMAL_GATEWARE_REVISION "2020-01-27"
 
 /* pcie */
 #define PCIE_FPGA_VENDOR_ID 0x10ee
-#define PCIE_FPGA_DEVICE_ID 0x7024
+#define PCIE_FPGA_DEVICE_ID 0x7021
 
 /* /!\ keep in sync with csr.h  /!\ */
 

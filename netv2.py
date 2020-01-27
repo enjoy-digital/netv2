@@ -71,24 +71,27 @@ class _CRG(Module, AutoCSR):
 # NeTV2 --------------------------------------------------------------------------------------------
 
 class NeTV2(SoCSDRAM):
+    SoCSDRAM.mem_map["csr"] = 0x00000000 # FIXME: avoid this to enable PCIe + CPU
     def __init__(self, platform,
-        with_cpu       = True,
-        with_sdram     = True,
-        with_etherbone = True,
+        with_cpu       = False,
+        with_sdram     = False,
+        with_etherbone = False,
         with_pcie      = True,
-        with_hdmi_in0  = True,
-        with_hdmi_out0 = True):
+        with_hdmi_in0  = False,
+        with_hdmi_out0 = False):
         sys_clk_freq = int(100e6)
 
         # SoCSDRAM ---------------------------------------------------------------------------------
         SoCSDRAM.__init__(self, platform, sys_clk_freq,
-            cpu_type            = "vexriscv" if with_cpu else None,
-            cpu_variant         = "lite",
-            l2_size             = 128,
-            csr_data_width      = 32,
-            integrated_rom_size = 0x8000 if with_cpu else 0x0000,
-            ident               = "NeTV2 LiteX SoC",
-            ident_version       = True)
+            cpu_type                 = "vexriscv" if with_cpu else None,
+            cpu_variant              = "lite",
+            l2_size                  = 128,
+            csr_data_width           = 32,
+            with_uart                = with_cpu,
+            integrated_rom_size      = 0x8000 if with_cpu else 0x0000,
+            integrated_main_ram_size = 0x1000 if not with_sdram else 0x0000,
+            ident                    = "NeTV2 LiteX SoC",
+            ident_version            = True)
 
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = _CRG(platform, sys_clk_freq)
@@ -125,27 +128,28 @@ class NeTV2(SoCSDRAM):
                 timing_settings = sdram_module.timing_settings)
 
         # Etherbone --------------------------------------------------------------------------------
-        # ethphy
-        self.submodules.ethphy = LiteEthPHYRMII(
-            clock_pads = self.platform.request("eth_clocks"),
-            pads       = self.platform.request("eth"))
-        self.add_csr("ethphy")
-        # ethcore
-        self.submodules.ethcore = LiteEthUDPIPCore(
-            phy         = self.ethphy,
-            mac_address = 0x10e2d5000000,
-            ip_address  = "192.168.1.50",
-            clk_freq    = self.clk_freq)
-        # etherbone
-        self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234)
-        self.add_wb_master(self.etherbone.wishbone.bus)
-        # timing constraints
-        self.platform.add_period_constraint(self.ethphy.crg.cd_eth_rx.clk, 1e9/50e6)
-        self.platform.add_period_constraint(self.ethphy.crg.cd_eth_tx.clk, 1e9/50e6)
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            self.ethphy.crg.cd_eth_rx.clk,
-            self.ethphy.crg.cd_eth_tx.clk)
+        if with_etherbone:
+            # ethphy
+            self.submodules.ethphy = LiteEthPHYRMII(
+                clock_pads = self.platform.request("eth_clocks"),
+                pads       = self.platform.request("eth"))
+            self.add_csr("ethphy")
+            # ethcore
+            self.submodules.ethcore = LiteEthUDPIPCore(
+                phy         = self.ethphy,
+                mac_address = 0x10e2d5000000,
+                ip_address  = "192.168.1.50",
+                clk_freq    = self.clk_freq)
+            # etherbone
+            self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234)
+            self.add_wb_master(self.etherbone.wishbone.bus)
+            # timing constraints
+            self.platform.add_period_constraint(self.ethphy.crg.cd_eth_rx.clk, 1e9/50e6)
+            self.platform.add_period_constraint(self.ethphy.crg.cd_eth_tx.clk, 1e9/50e6)
+            self.platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                self.ethphy.crg.cd_eth_rx.clk,
+                self.ethphy.crg.cd_eth_tx.clk)
 
         # PCIe -------------------------------------------------------------------------------------
         if with_pcie:
@@ -189,7 +193,8 @@ class NeTV2(SoCSDRAM):
                 self.pcie_dma0.sink.valid.eq(1),
                 If(self.pcie_dma0.sink.ready,
                     pcie_dma0_counter.eq(pcie_dma0_counter + 1)
-                )
+                ),
+                self.pcie_dma0.sink.data.eq(pcie_dma0_counter)
             ]
 
         # HDMI In 0 --------------------------------------------------------------------------------
