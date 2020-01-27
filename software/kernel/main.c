@@ -1061,7 +1061,7 @@ static int litepcie_pci_probe(struct pci_dev *dev, const struct pci_device_id *i
 
     /* show identifier */
     for(i=0; i < 256; i++)
-        fpga_identifier[i] = readl(litepcie_dev->bar0_addr + CSR_IDENTIFIER_MEM_BASE + i*4);
+        fpga_identifier[i] = litepcie_readl(litepcie_dev, CSR_IDENTIFIER_MEM_BASE + i*4);
     printk(KERN_INFO LITEPCIE_NAME " Version %s\n", fpga_identifier);
 
     pci_set_master(dev);
@@ -1083,7 +1083,7 @@ static int litepcie_pci_probe(struct pci_dev *dev, const struct pci_device_id *i
     }
 
     /* soft reset */
-    //litepcie_writel(litepcie_dev, CSR_CRG_RST_ADDR, 1);
+    litepcie_writel(litepcie_dev, CSR_CRG_RESET_ADDR, 1);
     udelay(1000);
 
     litepcie_dev->channels = DMA_CHANNELS;

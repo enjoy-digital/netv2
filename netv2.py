@@ -71,9 +71,8 @@ class _CRG(Module, AutoCSR):
 # NeTV2 --------------------------------------------------------------------------------------------
 
 class NeTV2(SoCSDRAM):
-    SoCSDRAM.mem_map["csr"] = 0x00000000 # FIXME: avoid this to enable PCIe + CPU
     def __init__(self, platform,
-        with_cpu       = False,
+        with_cpu       = True,
         with_sdram     = False,
         with_etherbone = False,
         with_pcie      = True,
@@ -88,6 +87,7 @@ class NeTV2(SoCSDRAM):
             l2_size                  = 128,
             csr_data_width           = 32,
             with_uart                = with_cpu,
+            uart_name                = "crossover",
             integrated_rom_size      = 0x8000 if with_cpu else 0x0000,
             integrated_main_ram_size = 0x1000 if not with_sdram else 0x0000,
             ident                    = "NeTV2 LiteX SoC",
@@ -165,7 +165,7 @@ class NeTV2(SoCSDRAM):
 
             # Wishbone bridge ----------------------------------------------------------------------
             self.submodules.pcie_bridge = LitePCIeWishboneBridge(self.pcie_endpoint,
-                base_address=self.mem_map["csr"])
+                base_address = self.mem_map["csr"])
             self.add_wb_master(self.pcie_bridge.wishbone)
 
             # DMA ----------------------------------------------------------------------------------
