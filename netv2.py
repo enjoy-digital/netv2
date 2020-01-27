@@ -72,6 +72,7 @@ class _CRG(Module, AutoCSR):
 
 class NeTV2(SoCSDRAM):
     def __init__(self, platform,
+        with_cpu       = True,
         with_sdram     = True,
         with_etherbone = True,
         with_pcie      = True,
@@ -81,11 +82,11 @@ class NeTV2(SoCSDRAM):
 
         # SoCSDRAM ---------------------------------------------------------------------------------
         SoCSDRAM.__init__(self, platform, sys_clk_freq,
-            cpu_type            = "vexriscv",
+            cpu_type            = "vexriscv" if with_cpu else None,
             cpu_variant         = "lite",
             l2_size             = 128,
             csr_data_width      = 32,
-            integrated_rom_size = 0x8000,
+            integrated_rom_size = 0x8000 if with_cpu else 0x0000,
             ident               = "NeTV2 LiteX SoC",
             ident_version       = True)
 
@@ -182,6 +183,15 @@ class NeTV2(SoCSDRAM):
                 self.comb += self.pcie_msi.irqs[i].eq(v)
                 self.add_constant(k + "_INTERRUPT", i)
 
+            # FIXME : Dummy counter capture, connect to HDMI In ------------------------------------
+            pcie_dma0_counter = Signal(32)
+            self.sync += [
+                self.pcie_dma0.sink.valid.eq(1),
+                If(self.pcie_dma0.sink.ready,
+                    pcie_dma0_counter.eq(pcie_dma0_counter + 1)
+                )
+            ]
+
         # HDMI In 0 --------------------------------------------------------------------------------
         if with_hdmi_in0:
             hdmi_in0_pads = platform.request("hdmi_in", 0)
@@ -191,7 +201,8 @@ class NeTV2(SoCSDRAM):
                 pads       = hdmi_in0_pads,
                 dram_port  = self.sdram.crossbar.get_port(mode="write"),
                 fifo_depth = 512,
-                device     = "xc7")
+                device     = "xc7",
+                split_mmcm = True)
             self.add_csr("hdmi_in0")
             self.add_csr("hdmi_in0_edid_mem")
             self.comb += self.hdmi_in0_freq.clk.eq(self.hdmi_in0.clocking.cd_pix.clk),
@@ -200,7 +211,7 @@ class NeTV2(SoCSDRAM):
                 self.hdmi_in0.clocking.cd_pix.clk,
                 self.hdmi_in0.clocking.cd_pix1p25x.clk,
                 self.hdmi_in0.clocking.cd_pix5x.clk)
-            self.platform.add_period_constraint(platform.lookup_request("hdmi_in", 0).clk_p, 1e9/148.5e6)
+            self.platform.add_period_constraint(platform.lookup_request("hdmi_in", 0).clk_p, 1e9/74.25e6)
 
         # HDMI Out 0 -------------------------------------------------------------------------------
         if with_hdmi_out0:
