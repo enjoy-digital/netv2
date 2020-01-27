@@ -83,6 +83,7 @@ class NeTV2(SoCSDRAM):
         SoCSDRAM.__init__(self, platform, sys_clk_freq,
             cpu_type            = "vexriscv",
             cpu_variant         = "lite",
+            l2_size             = 128,
             csr_data_width      = 32,
             integrated_rom_size = 0x8000,
             ident               = "NeTV2 LiteX SoC",
@@ -158,7 +159,8 @@ class NeTV2(SoCSDRAM):
             self.submodules.pcie_endpoint = LitePCIeEndpoint(self.pcie_phy)
 
             # Wishbone bridge ----------------------------------------------------------------------
-            self.submodules.pcie_bridge = LitePCIeWishboneBridge(self.pcie_endpoint)
+            self.submodules.pcie_bridge = LitePCIeWishboneBridge(self.pcie_endpoint,
+                base_address=self.mem_map["csr"])
             self.add_wb_master(self.pcie_bridge.wishbone)
 
             # DMA ----------------------------------------------------------------------------------
@@ -188,8 +190,7 @@ class NeTV2(SoCSDRAM):
                 pads       = hdmi_in0_pads,
                 dram_port  = self.sdram.crossbar.get_port(mode="write"),
                 fifo_depth = 512,
-                device     = "xc7",
-                split_mmcm = True)
+                device     = "xc7")
             self.add_csr("hdmi_in0")
             self.add_csr("hdmi_in0_edid_mem")
             self.comb += self.hdmi_in0_freq.clk.eq(self.hdmi_in0.clocking.cd_pix.clk),
@@ -211,7 +212,7 @@ class NeTV2(SoCSDRAM):
                     clock_domain = "hdmi_out0_pix",
                     reverse      = True),
                 mode       = "ycbcr422",
-                fifo_depth = 4096)
+                fifo_depth = 512)
             self.add_csr("hdmi_out0")
             platform.add_false_path_constraints(
                 self.crg.cd_sys.clk,

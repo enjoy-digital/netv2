@@ -114,7 +114,7 @@ static dev_t litepcie_dev_t;
 static inline uint32_t litepcie_readl(struct litepcie_device  *s, uint32_t addr)
 {
     uint32_t val;
-    val = readl(s->bar0_addr + addr);
+    val = readl(s->bar0_addr + addr - CSR_BASE);
 #ifdef DEBUG_CSR
     printk("csr_read: 0x%08x @ 0x%08x", val, addr);
 #endif
@@ -126,7 +126,7 @@ static inline void litepcie_writel(struct litepcie_device *s, uint32_t addr, uin
 #ifdef DEBUG_CSR
     printk("csr_write: 0x%08x @ 0x%08x", val, addr);
 #endif
-    return writel(val, s->bar0_addr + addr);
+    return writel(val, s->bar0_addr + addr - CSR_BASE);
 }
 
 static void litepcie_enable_interrupt(struct litepcie_device *s, int irq_num)
