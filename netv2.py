@@ -73,11 +73,11 @@ class _CRG(Module, AutoCSR):
 class NeTV2(SoCSDRAM):
     def __init__(self, platform,
         with_cpu       = True,
-        with_sdram     = False,
-        with_etherbone = False,
+        with_sdram     = True,
+        with_etherbone = True,
         with_pcie      = True,
-        with_hdmi_in0  = False,
-        with_hdmi_out0 = False):
+        with_hdmi_in0  = True,
+        with_hdmi_out0 = True):
         sys_clk_freq = int(100e6)
 
         # SoCSDRAM ---------------------------------------------------------------------------------
@@ -168,12 +168,19 @@ class NeTV2(SoCSDRAM):
                 base_address = self.mem_map["csr"])
             self.add_wb_master(self.pcie_bridge.wishbone)
 
-            # DMA ----------------------------------------------------------------------------------
+            # DMA0 ---------------------------------------------------------------------------------
             self.submodules.pcie_dma0 = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint,
                 with_buffering = True, buffering_depth=1024,
                 with_loopback  = True)
             self.add_csr("pcie_dma0")
-            self.add_constant("DMA_CHANNELS", 1)
+
+            # DMA1 ---------------------------------------------------------------------------------
+            self.submodules.pcie_dma1 = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint,
+                with_buffering = True, buffering_depth=1024,
+                with_loopback  = True)
+            self.add_csr("pcie_dma1")
+
+            self.add_constant("DMA_CHANNELS", 2)
 
             # MSI ----------------------------------------------------------------------------------
             self.submodules.pcie_msi = LitePCIeMSI()
@@ -181,7 +188,9 @@ class NeTV2(SoCSDRAM):
             self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
             self.interrupts = {
                 "PCIE_DMA0_WRITER":    self.pcie_dma0.writer.irq,
-                "PCIE_DMA0_READER":    self.pcie_dma0.reader.irq
+                "PCIE_DMA0_READER":    self.pcie_dma0.reader.irq,
+                "PCIE_DMA1_WRITER":    self.pcie_dma1.writer.irq,
+                "PCIE_DMA1_READER":    self.pcie_dma1.reader.irq,
             }
             for i, (k, v) in enumerate(sorted(self.interrupts.items())):
                 self.comb += self.pcie_msi.irqs[i].eq(v)
@@ -195,6 +204,15 @@ class NeTV2(SoCSDRAM):
                     pcie_dma0_counter.eq(pcie_dma0_counter + 1)
                 ),
                 self.pcie_dma0.sink.data.eq(pcie_dma0_counter)
+            ]
+
+            pcie_dma1_counter = Signal(32)
+            self.sync += [
+                self.pcie_dma1.sink.valid.eq(1),
+                If(self.pcie_dma1.sink.ready,
+                    pcie_dma1_counter.eq(pcie_dma1_counter + 2)
+                ),
+                self.pcie_dma1.sink.data.eq(pcie_dma1_counter)
             ]
 
         # HDMI In 0 --------------------------------------------------------------------------------

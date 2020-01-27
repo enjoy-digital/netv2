@@ -1105,14 +1105,12 @@ static int litepcie_pci_probe(struct pci_dev *dev, const struct pci_device_id *i
         init_waitqueue_head(&litepcie_dev->chan[i].wait_rd);
         init_waitqueue_head(&litepcie_dev->chan[i].wait_wr);
         switch(i) {
-#if 0
             case 1: {
                 litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA1_BASE;
                 litepcie_dev->chan[i].dma.writer_interrupt = PCIE_DMA1_WRITER_INTERRUPT;
                 litepcie_dev->chan[i].dma.reader_interrupt = PCIE_DMA1_READER_INTERRUPT;
             }
             break;
-#endif
             default:
             {
                 litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA0_BASE;
