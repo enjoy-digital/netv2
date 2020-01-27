@@ -1105,48 +1105,14 @@ static int litepcie_pci_probe(struct pci_dev *dev, const struct pci_device_id *i
         init_waitqueue_head(&litepcie_dev->chan[i].wait_rd);
         init_waitqueue_head(&litepcie_dev->chan[i].wait_wr);
         switch(i) {
-            case 7: {
-                litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA7_BASE;
-                litepcie_dev->chan[i].dma.writer_interrupt = PCIE_DMA7_WRITER_INTERRUPT;
-                litepcie_dev->chan[i].dma.reader_interrupt = PCIE_DMA7_READER_INTERRUPT;
-            }
-            break;
-            case 6: {
-                litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA6_BASE;
-                litepcie_dev->chan[i].dma.writer_interrupt = PCIE_DMA6_WRITER_INTERRUPT;
-                litepcie_dev->chan[i].dma.reader_interrupt = PCIE_DMA6_READER_INTERRUPT;
-            }
-            break;
-            case 5: {
-                litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA5_BASE;
-                litepcie_dev->chan[i].dma.writer_interrupt = PCIE_DMA5_WRITER_INTERRUPT;
-                litepcie_dev->chan[i].dma.reader_interrupt = PCIE_DMA5_READER_INTERRUPT;
-            }
-            break;
-            case 4: {
-                litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA4_BASE;
-                litepcie_dev->chan[i].dma.writer_interrupt = PCIE_DMA4_WRITER_INTERRUPT;
-                litepcie_dev->chan[i].dma.reader_interrupt = PCIE_DMA4_READER_INTERRUPT;
-            }
-            break;
-            case 3: {
-                litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA3_BASE;
-                litepcie_dev->chan[i].dma.writer_interrupt = PCIE_DMA3_WRITER_INTERRUPT;
-                litepcie_dev->chan[i].dma.reader_interrupt = PCIE_DMA3_READER_INTERRUPT;
-            }
-            break;
-            case 2: {
-                litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA2_BASE;
-                litepcie_dev->chan[i].dma.writer_interrupt = PCIE_DMA2_WRITER_INTERRUPT;
-                litepcie_dev->chan[i].dma.reader_interrupt = PCIE_DMA2_READER_INTERRUPT;
-            }
-            break;
+#if 0
             case 1: {
                 litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA1_BASE;
                 litepcie_dev->chan[i].dma.writer_interrupt = PCIE_DMA1_WRITER_INTERRUPT;
                 litepcie_dev->chan[i].dma.reader_interrupt = PCIE_DMA1_READER_INTERRUPT;
             }
             break;
+#endif
             default:
             {
                 litepcie_dev->chan[i].dma.base = CSR_PCIE_DMA0_BASE;
