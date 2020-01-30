@@ -25,6 +25,8 @@ from litex.soc.cores.spi_flash import S7SPIFlash
 
 from litedram.modules import K4B2G1646F
 from litedram.phy import s7ddrphy
+from litedram.frontend.dma import LiteDRAMDMAReader
+from litedram.frontend.dma import LiteDRAMDMAWriter
 
 from liteeth.phy.rmii import LiteEthPHYRMII
 from liteeth.core.mac import LiteEthMAC
@@ -72,12 +74,13 @@ class _CRG(Module, AutoCSR):
 
 class NeTV2(SoCSDRAM):
     def __init__(self, platform,
-        with_cpu       = True,
-        with_sdram     = True,
-        with_etherbone = True,
-        with_pcie      = True,
-        with_hdmi_in0  = True,
-        with_hdmi_out0 = True):
+        with_cpu        = True,
+        with_sdram      = True,
+        with_etherbone  = True,
+        with_pcie       = True,
+        with_sdram_dmas = False,
+        with_hdmi_in0   = True,
+        with_hdmi_out0  = True):
         sys_clk_freq = int(100e6)
 
         # SoCSDRAM ---------------------------------------------------------------------------------
@@ -214,6 +217,16 @@ class NeTV2(SoCSDRAM):
                 ),
                 self.pcie_dma1.sink.data.eq(pcie_dma1_counter)
             ]
+
+        # SDRAM DMAs -------------------------------------------------------------------------------
+        if with_sdram_dmas:
+            self.submodules.sdram_reader = LiteDRAMDMAReader(self.sdram.crossbar.get_port())
+            self.sdram_reader.add_csr()
+            self.add_csr("sdram_reader")
+
+            self.submodules.sdram_writer = LiteDRAMDMAReader(self.sdram.crossbar.get_port())
+            self.sdram_writer.add_csr()
+            self.add_csr("sdram_writer")
 
         # HDMI In 0 --------------------------------------------------------------------------------
         if with_hdmi_in0:
