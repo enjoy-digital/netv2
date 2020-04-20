@@ -6,6 +6,7 @@ import math
 import argparse
 
 from migen import *
+from migen.genlib.misc import WaitTimer
 
 from litex.build import tools
 
@@ -45,7 +46,7 @@ from litevideo.output import VideoOut
 
 class _CRG(Module, AutoCSR):
     def __init__(self, platform, sys_clk_freq):
-        self.reset = CSR() # FIXME: not used for now
+        self.rst = CSR()
 
         self.clock_domains.cd_sys       = ClockDomain()
         self.clock_domains.cd_sys4x     = ClockDomain(reset_less=True)
@@ -56,10 +57,18 @@ class _CRG(Module, AutoCSR):
 
         # # #
 
+        # Clk/Rst
         clk50 = platform.request("clk50")
         platform.add_period_constraint(clk50, 1e9/50e6)
 
+        # Delay software reset by 10us to ensure write has been acked on PCIe.
+        rst_delay = WaitTimer(int(10e-6*sys_clk_freq))
+        self.submodules += rst_delay
+        self.sync += If(self.rst.re, rst_delay.wait.eq(1))
+
+        # PLL
         self.submodules.pll = pll = S7PLL(speedgrade=-1)
+        self.comb += pll.reset.eq(rst_delay.done)
         pll.register_clkin(clk50, 50e6)
         pll.create_clkout(self.cd_sys,       sys_clk_freq)
         pll.create_clkout(self.cd_sys4x,     4*sys_clk_freq)

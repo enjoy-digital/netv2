@@ -1083,7 +1083,7 @@ static int litepcie_pci_probe(struct pci_dev *dev, const struct pci_device_id *i
     }
 
     /* soft reset */
-    litepcie_writel(litepcie_dev, CSR_CRG_RESET_ADDR, 1);
+    litepcie_writel(litepcie_dev, CSR_CRG_RST_ADDR, 1);
     udelay(1000);
 
     litepcie_dev->channels = DMA_CHANNELS;
