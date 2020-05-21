@@ -295,24 +295,19 @@ def main():
     parser.add_argument("--flash", action="store_true", help="Flash bitstream")
     args = parser.parse_args()
 
-    if args.load:
-        from litex.build.openocd import OpenOCD
-        prog = OpenOCD("openocd/openocd.cfg")
-        prog.load_bitstream("build/gateware/top.bit")
-        exit()
-
-    if args.flash:
-        from litex.build.openocd import OpenOCD
-        prog = OpenOCD("openocd/openocd.cfg", flash_proxy_basename="openocd/bscan_spi_xc7a35t.bit")
-        prog.set_flash_proxy_dir(".")
-        prog.flash(0, "build/gateware/top.bin")
-        exit()
-
     platform = netv2.Platform()
     soc      = NeTV2(platform)
-    builder  = Builder(soc, output_dir="build", csr_csv="test/csr.csv")
+    builder  = Builder(soc, csr_csv="test/csr.csv")
     builder.build(run=args.build)
     soc.generate_software_headers()
+
+    if args.load:
+        prog = soc.platform.create_programmer()
+        prog.load_bitstream(os.path.join(builder.gateware_dir, soc.build_name + ".bit"))
+
+    if args.flash:
+        prog = soc.platform.create_programmer()
+        prog.load_bitstream(os.path.join(builder.gateware_dir, soc.build_name + ".bin"))
 
 
 if __name__ == "__main__":
