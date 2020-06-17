@@ -8,7 +8,7 @@ from litex.build.xilinx.platform import XilinxPlatform
 
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.cores.uart import UARTWishboneBridge
-from litex.soc.integration import cpu_interface
+from litex.soc.integration import export
 
 from litescope import LiteScopeAnalyzer, LiteScopeIO
 
@@ -50,8 +50,8 @@ class Core(SoCCore):
             with_uart=False,
             with_timer=False
         )
-        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"), clk_freq))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
+        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq)
+        self.add_wb_master(self.bridge.wishbone)
         self.submodules.analyzer = LiteScopeAnalyzer(platform.request("bus"), 512)
         self.submodules.io = LiteScopeIO(16)
         self.comb += [
@@ -69,10 +69,7 @@ v_output = platform.get_verilog(core, name="litescope")
 v_output.write("litescope.v")
 
 # generate csr.csv
-memory_regions = core.get_memory_regions()
-csr_regions = core.get_csr_regions()
-constants = core.get_constants()
-write_to_file("csr.csv", cpu_interface.get_csr_csv(csr_regions, constants, memory_regions))
+write_to_file("csr.csv", export.get_csr_csv(core.csr_regions, core.constants, core.mem_regions))
 
 # generate analyzer.csv
 core.analyzer.export_csv(v_output.ns, "analyzer.csv")
