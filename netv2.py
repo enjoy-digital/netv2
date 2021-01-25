@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 
-import sys
 import os
-import math
 import argparse
 
-from migen import *
+from migen import ClockDomain, Module, If, Signal
 from migen.genlib.misc import WaitTimer
 
 from litex.build import tools
 
-from litex.boards.platforms import netv2
+from litex_boards.platforms import netv2
 
-from litex.soc.interconnect.csr import *
-from litex.soc.integration.soc_sdram import *
-from litex.soc.integration.builder import *
-from litex.soc.integration.export import *
+from litex.soc.integration.soc_sdram import SoCSDRAM
+from litex.soc.interconnect.csr import CSR, AutoCSR
+from litex.soc.integration.builder import Builder
+from litex.soc.integration.export import get_csr_header, get_soc_header, get_mem_header
+
 
 from litex.soc.cores.clock import S7PLL, S7IDELAYCTRL
 from litex.soc.cores.dna import DNA
@@ -27,10 +26,8 @@ from litex.soc.cores.spi_flash import S7SPIFlash
 from litedram.modules import K4B2G1646F
 from litedram.phy import s7ddrphy
 from litedram.frontend.dma import LiteDRAMDMAReader
-from litedram.frontend.dma import LiteDRAMDMAWriter
 
 from liteeth.phy.rmii import LiteEthPHYRMII
-from liteeth.core.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
