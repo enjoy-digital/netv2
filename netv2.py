@@ -157,7 +157,7 @@ class NeTV2(SoCSDRAM):
             self.sdram_reader.add_csr()
             self.add_csr("sdram_reader")
 
-            self.submodules.sdram_writer = LiteDRAMDMAReader(self.sdram.crossbar.get_port())
+            self.submodules.sdram_writer = LiteDRAMDMAWriter(self.sdram.crossbar.get_port())
             self.sdram_writer.add_csr()
             self.add_csr("sdram_writer")
 
