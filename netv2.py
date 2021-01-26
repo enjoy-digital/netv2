@@ -73,7 +73,7 @@ class NeTV2(SoCSDRAM):
     def __init__(self, platform,
         with_cpu        = True,
         with_sdram      = True,
-        with_etherbone  = True,
+        with_etherbone  = False,
         with_pcie       = True,
         with_sdram_dmas = False,
         with_hdmi_in0   = False,
@@ -122,9 +122,9 @@ class NeTV2(SoCSDRAM):
                 sys_clk_freq = sys_clk_freq)
             self.add_csr("ddrphy")
             self.add_sdram("sdram",
-                phy                     = self.ddrphy,
-                module                  = K4B2G1646F(sys_clk_freq, "1:4"),
-                origin                  = self.mem_map["main_ram"],
+                phy    = self.ddrphy,
+                module = K4B2G1646F(sys_clk_freq, "1:4"),
+                origin = self.mem_map["main_ram"],
             )
 
         # Etherbone --------------------------------------------------------------------------------
@@ -145,11 +145,11 @@ class NeTV2(SoCSDRAM):
 
         # PCIe -------------------------------------------------------------------------------------
         if with_pcie:
-            self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x4"),
-                data_width = 128,
+            self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x1"),
+                data_width = 64,
                 bar0_size  = 0x20000)
             self.add_csr("pcie_phy")
-            self.add_pcie(phy=self.pcie_phy, ndmas=2)
+            self.add_pcie(phy=self.pcie_phy, ndmas=2, max_pending_requests=2)
 
         # SDRAM DMAs -------------------------------------------------------------------------------
         if with_sdram_dmas:
