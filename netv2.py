@@ -10,7 +10,7 @@ from migen.genlib.misc import WaitTimer
 
 from litex.build import tools
 
-from litex.boards.platforms import netv2
+from litex_boards.platforms import netv2
 
 from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc_sdram import *
@@ -23,6 +23,7 @@ from litex.soc.cores.xadc import XADC
 from litex.soc.cores.icap import ICAP
 from litex.soc.cores.freqmeter import FreqMeter
 from litex.soc.cores.spi_flash import S7SPIFlash
+from litex.soc.cores.led import LedChaser
 
 from litedram.modules import K4B2G1646F
 from litedram.phy import s7ddrphy
@@ -30,54 +31,41 @@ from litedram.frontend.dma import LiteDRAMDMAReader
 from litedram.frontend.dma import LiteDRAMDMAWriter
 
 from liteeth.phy.rmii import LiteEthPHYRMII
-from liteeth.core.mac import LiteEthMAC
-from liteeth.core import LiteEthUDPIPCore
-from liteeth.frontend.etherbone import LiteEthEtherbone
 
 from litepcie.phy.s7pciephy import S7PCIEPHY
-from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
-from litepcie.frontend.dma import LitePCIeDMA
-from litepcie.frontend.wishbone import LitePCIeWishboneBridge
+from litepcie.software import generate_litepcie_software
 
 from litevideo.input import HDMIIn
 from litevideo.output import VideoOut
 
 # CRG ----------------------------------------------------------------------------------------------
 
-class _CRG(Module, AutoCSR):
+class _CRG(Module):
     def __init__(self, platform, sys_clk_freq):
-        self.rst = CSR()
-
+        self.rst = Signal()
         self.clock_domains.cd_sys       = ClockDomain()
         self.clock_domains.cd_sys4x     = ClockDomain(reset_less=True)
         self.clock_domains.cd_sys4x_dqs = ClockDomain(reset_less=True)
-        self.clock_domains.cd_clk200    = ClockDomain()
+        self.clock_domains.cd_idelay    = ClockDomain()
         self.clock_domains.cd_clk100    = ClockDomain()
         self.clock_domains.cd_eth       = ClockDomain()
 
-        # # #
-
         # Clk/Rst
         clk50 = platform.request("clk50")
-        platform.add_period_constraint(clk50, 1e9/50e6)
-
-        # Delay software reset by 10us to ensure write has been acked on PCIe.
-        rst_delay = WaitTimer(int(10e-6*sys_clk_freq))
-        self.submodules += rst_delay
-        self.sync += If(self.rst.re, rst_delay.wait.eq(1))
 
         # PLL
         self.submodules.pll = pll = S7PLL(speedgrade=-1)
-        self.comb += pll.reset.eq(rst_delay.done)
+        self.comb += pll.reset.eq(self.rst)
         pll.register_clkin(clk50, 50e6)
         pll.create_clkout(self.cd_sys,       sys_clk_freq)
         pll.create_clkout(self.cd_sys4x,     4*sys_clk_freq)
         pll.create_clkout(self.cd_sys4x_dqs, 4*sys_clk_freq, phase=90)
-        pll.create_clkout(self.cd_clk200,    200e6)
+        pll.create_clkout(self.cd_idelay,    200e6)
         pll.create_clkout(self.cd_clk100,    100e6)
         pll.create_clkout(self.cd_eth,       50e6)
+        platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin) # Ignore sys_clk to pll.clkin path created by SoC's rst.
 
-        self.submodules.idelayctrl = S7IDELAYCTRL(self.cd_clk200)
+        self.submodules.idelayctrl = S7IDELAYCTRL(self.cd_idelay)
 
 # NeTV2 --------------------------------------------------------------------------------------------
 
@@ -88,8 +76,8 @@ class NeTV2(SoCSDRAM):
         with_etherbone  = True,
         with_pcie       = True,
         with_sdram_dmas = False,
-        with_hdmi_in0   = True,
-        with_hdmi_out0  = True):
+        with_hdmi_in0   = False,
+        with_hdmi_out0  = False):
         sys_clk_freq = int(100e6)
 
         # SoCSDRAM ---------------------------------------------------------------------------------
@@ -107,7 +95,6 @@ class NeTV2(SoCSDRAM):
 
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = _CRG(platform, sys_clk_freq)
-        self.add_csr("crg")
 
         # DNA --------------------------------------------------------------------------------------
         self.submodules.dna = DNA()
@@ -124,8 +111,8 @@ class NeTV2(SoCSDRAM):
         self.add_csr("icap")
 
         # Flash ------------------------------------------------------------------------------------
-        self.submodules.flash = S7SPIFlash(platform.request("flash"), sys_clk_freq, 25e6)
-        self.add_csr("flash")
+        self.submodules.spiflash = S7SPIFlash(platform.request("spiflash"), sys_clk_freq, 25e6)
+        self.add_csr("spiflash")
 
         # DDR3 SDRAM -------------------------------------------------------------------------------
         if not self.integrated_main_ram_size:
@@ -134,98 +121,35 @@ class NeTV2(SoCSDRAM):
                 nphases      = 4,
                 sys_clk_freq = sys_clk_freq)
             self.add_csr("ddrphy")
-            sdram_module = K4B2G1646F(sys_clk_freq, "1:4")
-            self.register_sdram(self.ddrphy,
-                geom_settings   = sdram_module.geom_settings,
-                timing_settings = sdram_module.timing_settings)
+            self.add_sdram("sdram",
+                phy                     = self.ddrphy,
+                module                  = K4B2G1646F(sys_clk_freq, "1:4"),
+                origin                  = self.mem_map["main_ram"],
+            )
 
         # Etherbone --------------------------------------------------------------------------------
         if with_etherbone:
-            # ethphy
             self.submodules.ethphy = LiteEthPHYRMII(
                 clock_pads = self.platform.request("eth_clocks"),
                 pads       = self.platform.request("eth"))
             self.add_csr("ethphy")
-            # ethcore
-            self.submodules.ethcore = LiteEthUDPIPCore(
-                phy         = self.ethphy,
-                mac_address = 0x10e2d5000000,
-                ip_address  = "192.168.1.50",
-                clk_freq    = self.clk_freq)
-            # etherbone
-            self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234)
-            self.add_wb_master(self.etherbone.wishbone.bus)
-            # timing constraints
-            self.platform.add_period_constraint(self.ethphy.crg.cd_eth_rx.clk, 1e9/50e6)
-            self.platform.add_period_constraint(self.ethphy.crg.cd_eth_tx.clk, 1e9/50e6)
-            self.platform.add_false_path_constraints(
-                self.crg.cd_sys.clk,
-                self.ethphy.crg.cd_eth_rx.clk,
-                self.ethphy.crg.cd_eth_tx.clk)
+            if with_etherbone:
+                self.add_etherbone(phy=self.ethphy, ip_address="192.168.1.50")
+
+        # Leds -------------------------------------------------------------------------------------
+        self.submodules.leds = LedChaser(
+            pads         = platform.request_all("user_led"),
+            sys_clk_freq = sys_clk_freq)
+        self.add_csr("leds")
+
 
         # PCIe -------------------------------------------------------------------------------------
         if with_pcie:
-            # PHY ----------------------------------------------------------------------------------
-            self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x1"),
-                data_width = 64,
+            self.submodules.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x4"),
+                data_width = 128,
                 bar0_size  = 0x20000)
-            platform.add_false_path_constraint(self.crg.cd_sys.clk, self.pcie_phy.cd_pcie.clk)
             self.add_csr("pcie_phy")
-
-            # Endpoint -----------------------------------------------------------------------------
-            self.submodules.pcie_endpoint = LitePCIeEndpoint(self.pcie_phy)
-
-            # Wishbone bridge ----------------------------------------------------------------------
-            self.submodules.pcie_bridge = LitePCIeWishboneBridge(self.pcie_endpoint,
-                base_address = self.mem_map["csr"])
-            self.add_wb_master(self.pcie_bridge.wishbone)
-
-            # DMA0 ---------------------------------------------------------------------------------
-            self.submodules.pcie_dma0 = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint,
-                with_buffering = True, buffering_depth=1024,
-                with_loopback  = True)
-            self.add_csr("pcie_dma0")
-
-            # DMA1 ---------------------------------------------------------------------------------
-            self.submodules.pcie_dma1 = LitePCIeDMA(self.pcie_phy, self.pcie_endpoint,
-                with_buffering = True, buffering_depth=1024,
-                with_loopback  = True)
-            self.add_csr("pcie_dma1")
-
-            self.add_constant("DMA_CHANNELS", 2)
-
-            # MSI ----------------------------------------------------------------------------------
-            self.submodules.pcie_msi = LitePCIeMSI()
-            self.add_csr("pcie_msi")
-            self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
-            self.interrupts = {
-                "PCIE_DMA0_WRITER":    self.pcie_dma0.writer.irq,
-                "PCIE_DMA0_READER":    self.pcie_dma0.reader.irq,
-                "PCIE_DMA1_WRITER":    self.pcie_dma1.writer.irq,
-                "PCIE_DMA1_READER":    self.pcie_dma1.reader.irq,
-            }
-            for i, (k, v) in enumerate(sorted(self.interrupts.items())):
-                self.comb += self.pcie_msi.irqs[i].eq(v)
-                self.add_constant(k + "_INTERRUPT", i)
-
-            # FIXME : Dummy counter capture, connect to HDMI In ------------------------------------
-            pcie_dma0_counter = Signal(32)
-            self.sync += [
-                self.pcie_dma0.sink.valid.eq(1),
-                If(self.pcie_dma0.sink.ready,
-                    pcie_dma0_counter.eq(pcie_dma0_counter + 1)
-                ),
-                self.pcie_dma0.sink.data.eq(pcie_dma0_counter)
-            ]
-
-            pcie_dma1_counter = Signal(32)
-            self.sync += [
-                self.pcie_dma1.sink.valid.eq(1),
-                If(self.pcie_dma1.sink.ready,
-                    pcie_dma1_counter.eq(pcie_dma1_counter + 2)
-                ),
-                self.pcie_dma1.sink.data.eq(pcie_dma1_counter)
-            ]
+            self.add_pcie(phy=self.pcie_phy, ndmas=2)
 
         # SDRAM DMAs -------------------------------------------------------------------------------
         if with_sdram_dmas:
@@ -276,14 +200,6 @@ class NeTV2(SoCSDRAM):
                 self.hdmi_out0.driver.clocking.cd_pix.clk,
                 self.hdmi_out0.driver.clocking.cd_pix5x.clk)
 
-    def generate_software_headers(self):
-        csr_header = get_csr_header(self.csr_regions, self.constants, with_access_functions=False)
-        tools.write_to_file(os.path.join("software", "kernel", "csr.h"), csr_header)
-        soc_header = get_soc_header(self.constants, with_access_functions=False)
-        tools.write_to_file(os.path.join("software", "kernel", "soc.h"), soc_header)
-        mem_header = get_mem_header(self.mem_regions)
-        tools.write_to_file(os.path.join("software", "kernel", "mem.h"), mem_header)
-
 # Build --------------------------------------------------------------------------------------------
 
 def main():
@@ -292,14 +208,17 @@ def main():
     parser = argparse.ArgumentParser(description="".join(description[0:]), formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--build", action="store_true", help="Build bitstream")
     parser.add_argument("--load",  action="store_true", help="Load bitstream")
-    parser.add_argument("--flash", action="store_true", help="Flash bitstream")
+    parser.add_argument("--flash",  action="store_true", help="Flash bitstream")
+    parser.add_argument("--driver", action="store_true", help="Generate PCIe driver")
     args = parser.parse_args()
 
     platform = netv2.Platform()
     soc      = NeTV2(platform)
     builder  = Builder(soc, csr_csv="test/csr.csv")
     builder.build(run=args.build)
-    soc.generate_software_headers()
+
+    if args.driver:
+        generate_litepcie_software(soc, os.path.join(builder.output_dir, "driver"))
 
     if args.load:
         prog = soc.platform.create_programmer()
